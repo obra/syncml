@@ -37,6 +37,10 @@ Creates a new L<SyncML::Engine>.
 
 =cut
 
+my %COMMAND_HANDLERS = (
+    Alert => 'handle_alert',
+);
+
 sub new {
     my $class = shift;
     my $self = bless {}, $class;
@@ -55,6 +59,9 @@ sub respond_to_message {
 
     my $out_message = SyncML::Message->new;
 
+    $self->in_message($in_message);
+    $self->out_message($out_message);
+
     warn "Weird: session ID is different" 
 	if defined $self->session_id and $in_message->session_id ne $self->session_id;
     $self->session_id($in_message->session_id);
@@ -68,62 +75,61 @@ sub respond_to_message {
     $out_message->source_uri($in_message->target_uri);
     $out_message->target_uri($in_message->source_uri);
 
-    $self->add_status_for_header($in_message, $out_message, 200);
+    $self->add_status_for_header(200);
 
     for my $command (@{ $in_message->commands }) {
-	my $status_code = 200;
-	# XXX TODO FIXME actually run the command
-	$self->add_status_for_command($in_message, $out_message, $command, $status_code);
+	# The following method call does insert the status object into the
+	# output message, but any modifications to it will still be effective
+	my $status = $self->add_status_for_command($command);
+
+	if (my $handler = $COMMAND_HANDLERS{ $command->command_name }) {
+	    $self->$handler($command, $status);
+	} else {
+	    $status->status_code(200);
+	} 
     } 
 
     return $out_message;
-} 
+}
 
 sub add_status_for_header {
     my $self = shift;
-    my $in_message = shift;
-    my $out_message = shift;
     my $status_code = shift;
 
     my $status = SyncML::Message::Command->new;
     $status->command_name('Status');
-    $out_message->set_command_id($status);
+    $self->out_message->stamp_command_id($status);
 
-    $status->message_reference($in_message->message_id);
+    $status->message_reference($self->in_message->message_id);
     $status->command_reference('0');
     $status->command_name_reference('SyncHdr');
 
-    $status->target_reference($in_message->target_uri);
-    $status->source_reference($in_message->source_uri);
+    $status->target_reference($self->in_message->target_uri);
+    $status->source_reference($self->in_message->source_uri);
 
     $status->status_code($status_code);
 
-    push @{ $out_message->commands }, $status;
+    push @{ $self->out_message->commands }, $status;
     return;
 } 
 
 sub add_status_for_command {
     my $self = shift;
-    my $in_message = shift;
-    my $out_message = shift;
     my $command = shift;
-    my $status_code = shift;
 
     my $status = SyncML::Message::Command->new;
     $status->command_name('Status');
-    $out_message->set_command_id($status);
+    $self->out_message->stamp_command_id($status);
 
-    $status->message_reference($in_message->message_id);
+    $status->message_reference($self->in_message->message_id);
     $status->command_reference($command->command_id);
     $status->command_name_reference($command->command_name);
 
     $status->target_reference($command->target_uri) if defined_and_length($command->target_uri);
     $status->source_reference($command->source_uri) if defined_and_length($command->source_uri);
 
-    $status->status_code($status_code);
-
-    push @{ $out_message->commands }, $status;
-    return;
+    push @{ $self->out_message->commands }, $status;
+    return $status;
 } 
 
 sub _generate_internal_session_id {
@@ -132,8 +138,34 @@ sub _generate_internal_session_id {
     $self->internal_session_id( Digest::MD5::md5_hex(rand) );
 } 
 
+sub handle_alert {
+    my $self = shift;
+    my $command = shift;
+    my $status = shift;
 
-__PACKAGE__->mk_accessors(qw/session_id internal_session_id last_message_id uri_base/);
+    $status->status_code(200);
+
+    die unless @{ $command->items } == 1;
+    die unless $command->alert_code == 200;
+
+    my $item = $command->items->[0];
+
+    push @{ $status->items }, { meta => { AnchorNext => $item->{'meta'}->{'AnchorNext'} }};
+
+    my $response_alert = SyncML::Message::Command->new;
+    $response_alert->command_name('Alert');
+    $self->out_message->stamp_command_id($response_alert);
+    push @{ $self->out_message->commands }, $response_alert;
+    $response_alert->alert_code('201'); # slow sync
+    push @{ $response_alert->items }, { 
+	meta => { AnchorNext => 5678, AnchorLast => 1234 },
+	source_uri => $item->{'target_uri'},
+	target_uri => $item->{'source_uri'},
+    };
+} 
+
+
+__PACKAGE__->mk_accessors(qw/session_id internal_session_id last_message_id uri_base in_message out_message/);
 
 sub defined_and_length { defined $_[0] and length $_[0] }
 

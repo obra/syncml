@@ -192,6 +192,20 @@ sub _as_twig {
 	}
 	XML::Twig::Elt->new('Data', $item->{'data'})->paste_last_child($item_twig)
 	    if defined $item->{'data'};
+	if ($item->{'meta'} and %{ $item->{'meta'} }) {
+	    # bad hack: status probably gets to have meta too
+	    my $meta = XML::Twig::Elt->new($self->command_name eq 'Status' ? 'Data' : 'Meta');
+	    my $anchor = XML::Twig::Elt->new('Anchor');
+	    while (my ($k, $v) = each %{ $item->{'meta'} }) {
+		if ($k =~ s/^Anchor//) {
+		    XML::Twig::Elt->new($k, $v)->paste_last_child($anchor);
+		} else {
+		    XML::Twig::Elt->new($k, $v)->paste_last_child($meta);
+		} 
+	    } 
+	    $anchor->paste_last_child($meta) if $anchor->has_children;
+	    $meta->paste_last_child($item_twig);
+	} 
 
 	$item_twig->paste_last_child($command);
     } 
@@ -258,13 +272,29 @@ sub _new_from_twig {
 	    my $source = $item->first_child('Source');
 	    $item_struct->{'source_uri'} = $source->first_child_text('LocURI') if $source;
 	    $item_struct->{'data'} = $item->first_child_text('Data');
+
+	    my $meta_hash = {};
+	    my $meta = $item->first_child('Meta');
+	    if ($meta) {
+		for my $kid ($meta->children) {
+		    next if $kid->tag eq 'Mem'; # don't feel like dealing with its nesting
+
+		    if ($kid->tag eq 'Anchor') {
+			$meta_hash->{'AnchorLast'} = $kid->first_child_text('Last');
+			$meta_hash->{'AnchorNext'} = $kid->first_child_text('Next');
+		    } else {
+			$meta_hash->{$kid->tag} = $kid->text;
+		    } 
+		} 
+	    } 
+	    $item_struct->{'meta'} = $meta_hash;
+	    
 	    push @{ $self->items }, $item_struct;
 	} 
     }
 
     return $self;
 } 
-
 
 =head1 DIAGNOSTICS
 

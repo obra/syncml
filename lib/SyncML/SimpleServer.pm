@@ -48,8 +48,12 @@ sub handle_request {
     return unless $in_message; # should do some sort of output I guess
 
     my $engine;
-    if ($cgi->param('sid')) {
-	$engine = $self->engines->{ $cgi->param('sid') };
+    
+    # Yeah, yeah, parsing our own query strings is usually the sign of an awful
+    # CGI, except that CGI.pm is mean and won't parse the query string if
+    # there's posted data.
+    if ($ENV{'QUERY_STRING'} =~ /^sid=([0-9a-f]+)/) {
+	$engine = $self->engines->{ $1 };
     } 
 
     unless ($engine) {

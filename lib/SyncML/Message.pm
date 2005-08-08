@@ -171,13 +171,13 @@ sub as_xml {
     return $message->sprint;
 } 
 
-=head2 set_command_id $command
+=head2 stamp_command_id $command
 
 Sets the command_id of C<$command> to C<next_command_id> and increment C<next_command_id>.
 
 =cut
 
-sub set_command_id {
+sub stamp_command_id {
     my $self = shift;
     my $command = shift;
     $command->command_id($self->next_command_id);
