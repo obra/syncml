@@ -115,15 +115,17 @@ __PACKAGE__->mk_accessors(qw/command_name command_id no_response items subcomman
 			     message_reference command_reference 
 			     command_name_reference target_reference source_reference status_code alert_code/);
 
-=head2 new
+=head2 new [$command_name]
 
-Creates a new L<SyncML::Message::Command>.
+Creates a new L<SyncML::Message::Command>, with command name C<$command_name> if it's given.
 
 =cut
 
 sub new {
     my $class = shift;
     my $self = bless {}, $class;
+
+    $self->command_name(shift) if @_;
 
     $self->items([]);
     $self->subcommands([]);
@@ -175,7 +177,7 @@ sub _as_twig {
     } 
 
     for my $subcommand (@{ $self->subcommands }) {
-	$command->paste_last_child($subcommand->_as_twig);
+	$subcommand->_as_twig->paste_last_child($command);
     } 
 
     for my $item (@{ $self->items }) {
@@ -204,6 +206,11 @@ sub _as_twig {
 		} 
 	    } 
 	    $anchor->paste_last_child($meta) if $anchor->has_children;
+	    for my $metinf ($meta->children) {
+		# Yes, this is 'xmlns', not 'xml:ns'.  SyncML is weird like
+		# that.
+		$metinf->set_att(xmlns => "syncml:metinf");
+	    } 
 	    $meta->paste_last_child($item_twig);
 	} 
 

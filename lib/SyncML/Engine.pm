@@ -9,6 +9,7 @@ use Carp;
 use SyncML::Message;
 use SyncML::Message::Command;
 use Digest::MD5;
+use MIME::Base64 ();
 
 
 =head1 NAME
@@ -39,6 +40,7 @@ Creates a new L<SyncML::Engine>.
 
 my %COMMAND_HANDLERS = (
     Alert => 'handle_alert',
+    Sync => 'handle_sync',
 );
 
 sub new {
@@ -162,6 +164,42 @@ sub handle_alert {
 	source_uri => $item->{'target_uri'},
 	target_uri => $item->{'source_uri'},
     };
+} 
+
+
+# If they're sending a Sync, that means we need to send a Sync back.
+# This handler isn't actually going to handle the subcommands of the client
+# Sync yet; for now we'll just have it add our Sync.
+sub handle_sync {
+    my $self = shift;
+    my $command = shift;
+    my $status = shift;
+
+    $status->status_code(200);
+
+    my $response_sync = SyncML::Message::Command->new('Sync');
+    $self->out_message->stamp_command_id($response_sync);
+    push @{ $self->out_message->commands }, $response_sync;
+    $response_sync->target_uri( $command->source_uri );
+    $response_sync->source_uri( $command->target_uri );
+
+    my $fake_add = SyncML::Message::Command->new('Add');
+    $self->out_message->stamp_command_id($fake_add);
+    push @{ $fake_add->items }, {
+	source_uri => '123456',
+	data => MIME::Base64::encode("foo bar\n", ''),
+	meta => {
+	    Type => "text/plain",
+	} 
+    }; 
+    push @{ $fake_add->items }, {
+	source_uri => '7890',
+	data => MIME::Base64::encode("baz quux\n", ''),
+	meta => {
+	    Type => "text/plain",
+	} 
+    }; 
+    push @{ $response_sync->subcommands }, $fake_add;
 } 
 
 
