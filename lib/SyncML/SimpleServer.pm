@@ -3,7 +3,7 @@ package SyncML::SimpleServer;
 use warnings;
 use strict;
 
-use base qw/HTTP::Server::Simple::CGI/;
+use base qw/HTTP::Server::Simple::Recorder HTTP::Server::Simple::CGI/;
 
 use Carp;
 
@@ -62,6 +62,8 @@ sub handle_request {
     } 
 
     my $out_message = $engine->respond_to_message( $in_message );
+
+    delete $self->engines->{ $engine->internal_session_id } if $engine->done;
 
     $resp->content($out_message->as_xml);
     $resp->content_length(length $resp->content);

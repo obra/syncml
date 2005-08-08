@@ -41,14 +41,16 @@ Creates a new L<SyncML::Engine>.
 my %COMMAND_HANDLERS = (
     Alert => 'handle_alert',
     Sync => 'handle_sync',
+    Map => 'handle_map',
 );
 
 sub new {
     my $class = shift;
     my $self = bless {}, $class;
     
-    $self->uri_base("http://localhost:8080/");
+    $self->uri_base("http://18.19.5.220:8080/");
     $self->last_message_id(0);
+    $self->anchor(0);
 
     $self->_generate_internal_session_id;
 
@@ -159,13 +161,25 @@ sub handle_alert {
     $self->out_message->stamp_command_id($response_alert);
     push @{ $self->out_message->commands }, $response_alert;
     $response_alert->alert_code('201'); # slow sync
+    my $last_anchor = $self->anchor;
+    $self->anchor(time);
     push @{ $response_alert->items }, { 
-	meta => { AnchorNext => 5678, AnchorLast => 1234 },
+	meta => { AnchorNext => $self->anchor, AnchorLast => $last_anchor },
 	source_uri => $item->{'target_uri'},
 	target_uri => $item->{'source_uri'},
     };
 } 
 
+# Map commands happen only in the final package; for now ignore the actual
+# content and mark the engine as done.
+sub handle_map {
+    my $self = shift;
+    my $command = shift;
+    my $status = shift;
+
+    $status->status_code(200);
+    $self->done(1);
+} 
 
 # If they're sending a Sync, that means we need to send a Sync back.
 # This handler isn't actually going to handle the subcommands of the client
@@ -185,25 +199,31 @@ sub handle_sync {
 
     my $fake_add = SyncML::Message::Command->new('Add');
     $self->out_message->stamp_command_id($fake_add);
+    my $test_uid = int rand 1_000_000;
     push @{ $fake_add->items }, {
-	source_uri => '123456',
-	data => MIME::Base64::encode("foo bar\n", ''),
+	source_uri => $test_uid,
+	data => <<END_TODO,
+BEGIN:VCALENDAR
+VERSION:1.0
+BEGIN:VTODO
+LAST-MODIFIED:20050808T173000
+DCREATED:20050808T171030
+DESCRIPTION: Added from SyncML
+SUMMARY:Added $test_uid from SyncML Perl
+STATUS:NEEDS_ACTION
+END:VTODO
+END:VCALENDAR
+END_TODO
 	meta => {
-	    Type => "text/plain",
-	} 
-    }; 
-    push @{ $fake_add->items }, {
-	source_uri => '7890',
-	data => MIME::Base64::encode("baz quux\n", ''),
-	meta => {
-	    Type => "text/plain",
+	    Type => "text/x-vcalendar",
 	} 
     }; 
     push @{ $response_sync->subcommands }, $fake_add;
 } 
 
 
-__PACKAGE__->mk_accessors(qw/session_id internal_session_id last_message_id uri_base in_message out_message/);
+__PACKAGE__->mk_accessors(qw/session_id internal_session_id last_message_id uri_base in_message out_message
+    anchor done/);
 
 sub defined_and_length { defined $_[0] and length $_[0] }
 
