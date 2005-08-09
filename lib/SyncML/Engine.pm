@@ -11,6 +11,9 @@ use SyncML::Message::Command;
 use Digest::MD5;
 use MIME::Base64 ();
 
+use Data::ICal;
+use Data::ICal::Entry::Todo;
+
 
 =head1 NAME
 
@@ -48,7 +51,6 @@ sub new {
     my $class = shift;
     my $self = bless {}, $class;
     
-    $self->uri_base("http://18.19.5.220:8080/");
     $self->last_message_id(0);
     $self->anchor(0);
 
@@ -200,20 +202,18 @@ sub handle_sync {
     my $fake_add = SyncML::Message::Command->new('Add');
     $self->out_message->stamp_command_id($fake_add);
     my $test_uid = int rand 1_000_000;
+
+    my $calendar = Data::ICal->new;
+    my $todo = Data::ICal::Entry::Todo->new;
+    $todo->add_properties(
+	summary => "Added $test_uid from SyncML Perl with Data::ICal",
+	status => "NEEDS_ACTION",
+    );
+    $calendar->add_entry($todo);
+
     push @{ $fake_add->items }, {
 	source_uri => $test_uid,
-	data => <<END_TODO,
-BEGIN:VCALENDAR
-VERSION:1.0
-BEGIN:VTODO
-LAST-MODIFIED:20050808T173000
-DCREATED:20050808T171030
-DESCRIPTION: Added from SyncML
-SUMMARY:Added $test_uid from SyncML Perl
-STATUS:NEEDS_ACTION
-END:VTODO
-END:VCALENDAR
-END_TODO
+	data => $calendar->as_string,
 	meta => {
 	    Type => "text/x-vcalendar",
 	} 

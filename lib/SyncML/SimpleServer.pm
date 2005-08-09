@@ -10,6 +10,7 @@ use Carp;
 use HTTP::Response;
 use SyncML::Message;
 use SyncML::Engine;
+use Sys::HostIP;
 
 =head1 NAME
 
@@ -58,6 +59,7 @@ sub handle_request {
 
     unless ($engine) {
 	$engine = SyncML::Engine->new;
+	$engine->uri_base("http://" . hostip . ":8080/");
 	$self->engines->{ $engine->internal_session_id } = $engine;
     } 
 
@@ -82,6 +84,11 @@ C<internal_session_id> as the key.
 sub engines {
     my $self = shift;
     return $self->{'_syncml_engines'} ||= {};
+} 
+
+sub print_banner {
+    my $self = shift;
+    print "SyncML::SimpleServer: You can connect to your server at http://" . hostip . ":8080/\n";
 } 
 
 
