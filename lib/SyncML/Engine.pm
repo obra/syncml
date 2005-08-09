@@ -10,6 +10,7 @@ use SyncML::Message;
 use SyncML::Message::Command;
 use Digest::MD5;
 use MIME::Base64 ();
+use YAML ();
 
 use Data::ICal;
 use Data::ICal::Entry::Todo;
@@ -172,15 +173,31 @@ sub handle_alert {
     };
 } 
 
-# Map commands happen only in the final package; for now ignore the actual
-# content and mark the engine as done.
 sub handle_map {
     my $self = shift;
     my $command = shift;
     my $status = shift;
 
-    $status->status_code(200);
+    # Map commands happen only in the final package, so mark the engine as done.
     $self->done(1);
+
+    my $db = YAML::LoadFile($self->yaml_database);
+
+    for my $item (@{ $command->items }) {
+	my $luid = $item->{source_uri};
+	my $temp_guid = $item->{target_uri};
+
+	unless ($db->{'future'}{$temp_guid}) {
+	    warn "couldn't find temporary GUID $temp_guid!";
+	    next;
+	} 
+
+	$db->{'current'}{$luid} = delete $db->{'future'}{$temp_guid};
+    } 
+
+    YAML::DumpFile($self->yaml_database, $db);
+
+    $status->status_code(200);
 } 
 
 # If they're sending a Sync, that means we need to send a Sync back.
@@ -199,31 +216,64 @@ sub handle_sync {
     $response_sync->target_uri( $command->source_uri );
     $response_sync->source_uri( $command->target_uri );
 
-    my $fake_add = SyncML::Message::Command->new('Add');
-    $self->out_message->stamp_command_id($fake_add);
-    my $test_uid = int rand 1_000_000;
+    my $db = YAML::LoadFile($self->yaml_database);
+    for my $luid (keys %{ $db->{'current'} }) {
+	my $replace = SyncML::Message::Command->new('Replace');
+	$self->out_message->stamp_command_id($replace);
 
-    my $calendar = Data::ICal->new;
-    my $todo = Data::ICal::Entry::Todo->new;
-    $todo->add_properties(
-	summary => "Added $test_uid from SyncML Perl with Data::ICal",
-	status => "NEEDS_ACTION",
-    );
-    $calendar->add_entry($todo);
+	my $calendar = Data::ICal->new;
+	my $todo = Data::ICal::Entry::Todo->new;
+	$todo->add_properties(
+	    summary => $db->{current}{$luid}{summary},
+	    status => "NEEDS_ACTION",
+	);
+	$calendar->add_entry($todo);
 
-    push @{ $fake_add->items }, {
-	source_uri => $test_uid,
-	data => $calendar->as_string,
-	meta => {
-	    Type => "text/x-vcalendar",
-	} 
-    }; 
-    push @{ $response_sync->subcommands }, $fake_add;
+	push @{ $replace->items }, {
+	    target_uri => $luid,
+	    data => $calendar->as_string,
+	    meta => {
+		Type => "text/x-vcalendar",
+	    } 
+	}; 
+    	push @{ $response_sync->subcommands }, $replace;
+    } 
+    for my $temp_guid (keys %{ $db->{'future'} }) {
+	my $add = SyncML::Message::Command->new('Add');
+	$self->out_message->stamp_command_id($add);
+
+	my $calendar = Data::ICal->new;
+	my $todo = Data::ICal::Entry::Todo->new;
+	$todo->add_properties(
+	    summary => $db->{future}{$temp_guid}{summary},
+	    status => "NEEDS_ACTION",
+	);
+	$calendar->add_entry($todo);
+
+	push @{ $add->items }, {
+	    source_uri => $temp_guid,
+	    data => $calendar->as_string,
+	    meta => {
+		Type => "text/x-vcalendar",
+	    } 
+	}; 
+    	push @{ $response_sync->subcommands }, $add;
+    } 
+    for my $luid (keys %{ $db->{'dead'} }) {
+	my $delete = SyncML::Message::Command->new('Delete');
+	$self->out_message->stamp_command_id($delete);
+
+	push @{ $delete->items }, {
+	    target_uri => $luid,
+	}; 
+    	push @{ $response_sync->subcommands }, $delete;
+    } 
+    $db->{'dead'} = {}; # forget about them
+    YAML::DumpFile($self->yaml_database, $db);
 } 
 
-
 __PACKAGE__->mk_accessors(qw/session_id internal_session_id last_message_id uri_base in_message out_message
-    anchor done/);
+    anchor done yaml_database/);
 
 sub defined_and_length { defined $_[0] and length $_[0] }
 

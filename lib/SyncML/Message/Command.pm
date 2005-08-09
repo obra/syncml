@@ -179,9 +179,11 @@ sub _as_twig {
     for my $subcommand (@{ $self->subcommands }) {
 	$subcommand->_as_twig->paste_last_child($command);
     } 
+    
+    my $is_map = $self->command_name eq 'Map';
 
     for my $item (@{ $self->items }) {
-	my $item_twig = XML::Twig::Elt->new('Item');
+	my $item_twig = XML::Twig::Elt->new($is_map ? 'MapItem' : 'Item');
 	if (defined $item->{'target_uri'}) {
 	    my $e = XML::Twig::Elt->new('Target');
 	    XML::Twig::Elt->new('LocURI', $item->{'target_uri'})->paste($e);
@@ -192,27 +194,30 @@ sub _as_twig {
 	    XML::Twig::Elt->new('LocURI', $item->{'source_uri'})->paste($e);
 	    $e->paste_last_child($item_twig);
 	}
-	XML::Twig::Elt->new('Data', $item->{'data'})->paste_last_child($item_twig)
-	    if defined $item->{'data'};
-	if ($item->{'meta'} and %{ $item->{'meta'} }) {
-	    # bad hack: status probably gets to have meta too
-	    my $meta = XML::Twig::Elt->new($self->command_name eq 'Status' ? 'Data' : 'Meta');
-	    my $anchor = XML::Twig::Elt->new('Anchor');
-	    while (my ($k, $v) = each %{ $item->{'meta'} }) {
-		if ($k =~ s/^Anchor//) {
-		    XML::Twig::Elt->new($k, $v)->paste_last_child($anchor);
-		} else {
-		    XML::Twig::Elt->new($k, $v)->paste_last_child($meta);
+
+	unless ($is_map) {
+	    XML::Twig::Elt->new('Data', $item->{'data'})->paste_last_child($item_twig)
+		if defined $item->{'data'};
+	    if ($item->{'meta'} and %{ $item->{'meta'} }) {
+		# bad hack: status probably gets to have meta too
+		my $meta = XML::Twig::Elt->new($self->command_name eq 'Status' ? 'Data' : 'Meta');
+		my $anchor = XML::Twig::Elt->new('Anchor');
+		while (my ($k, $v) = each %{ $item->{'meta'} }) {
+		    if ($k =~ s/^Anchor//) {
+			XML::Twig::Elt->new($k, $v)->paste_last_child($anchor);
+		    } else {
+			XML::Twig::Elt->new($k, $v)->paste_last_child($meta);
+		    } 
 		} 
-	    } 
-	    $anchor->paste_last_child($meta) if $anchor->has_children;
-	    for my $metinf ($meta->children) {
-		# Yes, this is 'xmlns', not 'xml:ns'.  SyncML is weird like
-		# that.
-		$metinf->set_att(xmlns => "syncml:metinf");
-	    } 
-	    $meta->paste_last_child($item_twig);
-	} 
+		$anchor->paste_last_child($meta) if $anchor->has_children;
+		for my $metinf ($meta->children) {
+		    # Yes, this is 'xmlns', not 'xml:ns'.  SyncML is weird like
+		    # that.
+		    $metinf->set_att(xmlns => "syncml:metinf");
+		} 
+		$meta->paste_last_child($item_twig);
+	    }
+	}
 
 	$item_twig->paste_last_child($command);
     } 
@@ -272,7 +277,7 @@ sub _new_from_twig {
 	    push @{ $self->subcommands }, $command_obj;
 	} 
 
-	for my $item ($command->children('Item')) {
+	for my $item ($command->children($self->command_name eq 'Map' ? 'MapItem' : 'Item')) {
 	    my $item_struct = {};
 	    my $target = $item->first_child('Target');
 	    $item_struct->{'target_uri'} = $target->first_child_text('LocURI') if $target;
