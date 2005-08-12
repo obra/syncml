@@ -113,7 +113,9 @@ XXX TODO FIXME
 __PACKAGE__->mk_accessors(qw/command_name command_id no_response items subcommands
                              target_uri source_uri
 			     message_reference command_reference 
-			     command_name_reference target_reference source_reference status_code alert_code/);
+			     command_name_reference target_reference source_reference status_code alert_code
+			     meta_hash
+			     include_device_info/);
 
 sub defined_and_length { defined $_[0] and length $_[0] }
 
@@ -154,18 +156,54 @@ sub _as_twig {
     $command->set_pretty_print('indented');
 
     XML::Twig::Elt->new('CmdID', $self->command_id)->paste(last_child => $command);
+    
+    if ($self->meta_hash and %{ $self->meta_hash }) {
+	my $meta = XML::Twig::Elt->new('Meta');
+	my $anchor = XML::Twig::Elt->new('Anchor');
+	while (my ($k, $v) = each %{ $self->meta_hash }) {
+	    if ($k =~ s/^Anchor//) {
+		XML::Twig::Elt->new($k, $v)->paste_last_child($anchor);
+	    } else {
+		XML::Twig::Elt->new($k, $v)->paste_last_child($meta);
+	    } 
+	} 
+	$anchor->paste_last_child($meta) if $anchor->has_children;
+	for my $metinf ($meta->children) {
+	    # Yes, this is 'xmlns', not 'xml:ns'.  SyncML is weird like
+	    # that.
+	    $metinf->set_att(xmlns => "syncml:metinf");
+	} 
+	$meta->paste_last_child($command);
+    }
 
-    if ($self->command_name eq 'Status') {
+    if ($self->command_name eq 'Status' or $self->command_name eq 'Results') {
 	XML::Twig::Elt->new('MsgRef', $self->message_reference)->paste_last_child($command);
 	XML::Twig::Elt->new('CmdRef', $self->command_reference)->paste_last_child($command);
-	XML::Twig::Elt->new('Cmd', $self->command_name_reference)->paste_last_child($command);
+	XML::Twig::Elt->new('Cmd', $self->command_name_reference)->paste_last_child($command)
+	    if $self->command_name eq 'Status';
 
 	XML::Twig::Elt->new('TargetRef', $self->target_reference)->paste_last_child($command)
 	    if defined_and_length($self->target_reference);
 	XML::Twig::Elt->new('SourceRef', $self->source_reference)->paste_last_child($command)
 	    if defined_and_length($self->source_reference);
 	
-	XML::Twig::Elt->new('Data', $self->status_code)->paste_last_child($command);
+	if ($self->command_name eq 'Status') {
+	    XML::Twig::Elt->new('Data', $self->status_code)->paste_last_child($command);
+	} else {
+	    my $item = XML::Twig::Elt->new('Item');
+	    $item->paste_last_child($command);
+	    if (defined_and_length($self->source_uri)) {
+		my $source = XML::Twig::Elt->new('Source');
+		XML::Twig::Elt->new('LocURI', $self->source_uri)->paste_last_child($source);
+		$source->paste_last_child($item);
+	    } 
+	    if ($self->include_device_info) {
+		my $data = XML::Twig::Elt->new('Data');
+		$data->paste_last_child($item);
+		my $devinfo_twig = $self->_devinfo_twig;
+		$devinfo_twig->paste_last_child($data);
+	    } 
+	} 
     } else {
 	XML::Twig::Elt->new('NoResp')->paste_last_child($command) if $self->no_response;
 	XML::Twig::Elt->new('Data', $self->alert_code)->paste_last_child($command) if $self->command_name eq 'Alert';
@@ -310,6 +348,38 @@ sub _new_from_twig {
     }
 
     return $self;
+} 
+
+sub _devinfo_twig {
+    my $self = shift;
+
+    my $devinf = XML::Twig::Elt->new('DevInf');
+    XML::Twig::Elt->new('VerDTD', '1.1')->paste_last_child($devinf);
+    XML::Twig::Elt->new('Man', 'bps')->paste_last_child($devinf);
+    XML::Twig::Elt->new('Mod', 'SyncML::Engine')->paste_last_child($devinf);
+    XML::Twig::Elt->new('SwV', '0.1')->paste_last_child($devinf);
+    XML::Twig::Elt->new('HwV', 'perl')->paste_last_child($devinf);
+    XML::Twig::Elt->new('DevID', 'xyzzy')->paste_last_child($devinf);
+    XML::Twig::Elt->new('DevTyp', 'server')->paste_last_child($devinf);
+
+    my $tasks = XML::Twig::Elt->new('DataStore');
+    $tasks->paste_last_child($devinf);
+    XML::Twig::Elt->new('SourceRef', './tasks')->paste_last_child($tasks);
+    XML::Twig::Elt->new('DisplayName', 'Tasks')->paste_last_child($tasks);
+    my $rxpref = XML::Twig::Elt->new('Rx-Pref');
+    $rxpref->paste_last_child($tasks);
+    XML::Twig::Elt->new('CTType', 'text/calendar')->paste_last_child($rxpref);
+    XML::Twig::Elt->new('VerCT', '2.0')->paste_last_child($rxpref);
+    my $txpref = XML::Twig::Elt->new('Tx-Pref');
+    $txpref->paste_last_child($tasks);
+    XML::Twig::Elt->new('CTType', 'text/calendar')->paste_last_child($txpref);
+    XML::Twig::Elt->new('VerCT', '2.0')->paste_last_child($txpref);
+    my $synccap = XML::Twig::Elt->new('SyncCap');
+    $synccap->paste_last_child($tasks);
+    XML::Twig::Elt->new('SyncType', '1')->paste_last_child($synccap);
+    XML::Twig::Elt->new('SyncType', '2')->paste_last_child($synccap);
+
+    return $devinf;
 } 
 
 =head1 DIAGNOSTICS

@@ -11,7 +11,7 @@ use HTTP::Response;
 use SyncML::Message;
 use SyncML::Engine;
 use Sys::HostIP;
-use XML::WBXML::SyncML;
+use XML::WBXML;
 
 =head1 NAME
 
@@ -49,7 +49,7 @@ sub handle_request {
 
     my $input = $cgi->param('POSTDATA');
     if ($using_wbxml) {
-	$input = XML::WBXML::SyncML::wbxml_to_xml($input);
+	$input = XML::WBXML::wbxml_to_xml($input);
     }
 
     my $in_message = SyncML::Message->new_from_xml($input);
@@ -77,13 +77,13 @@ sub handle_request {
     delete $self->engines->{ $engine->internal_session_id } if $engine->done;
 
     my $output = $out_message->as_xml;
-    if ($using_wbxml) {
-	$output = XML::WBXML::SyncML::xml_to_wbxml($output);
+    if ($using_wbxml) { # warn $output;
+	$output = XML::WBXML::xml_to_wbxml($output);
     } 
     
     $resp->content($output);
     $resp->content_length(length $resp->content);
-    $resp->content_type('application/vnd.syncml+xml');
+    $resp->content_type('application/vnd.syncml+' . ($using_wbxml ? 'wb' : '') . 'xml');
 
     print $resp->as_string;
 }

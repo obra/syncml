@@ -1,10 +1,8 @@
 ---
 current:
-  20050809T051353Z-16184-101-16160-1@w20-575-20.mit.edu:
-    summary: This is number 1234.
-  20050809T051353Z-16184-101-16160-3@w20-575-20.mit.edu:
-    summary: This is noiumber 5678.
-  20050809T052515Z-16410-101-16243-4@w20-575-20.mit.edu:
-    summary: Hi kids yay!
+  117446894:
+    summary: now more
+  167778208:
+    summary: A secondy one
 dead: {}
 future: {}

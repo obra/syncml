@@ -46,6 +46,7 @@ my %COMMAND_HANDLERS = (
     Alert => 'handle_alert',
     Sync => 'handle_sync',
     Map => 'handle_map',
+    Get => 'handle_get',
 );
 
 sub new {
@@ -176,6 +177,29 @@ sub handle_alert {
     };
 } 
 
+sub handle_get {
+    my $self = shift;
+    my $command = shift;
+    my $status = shift;
+
+    $status->status_code(200);
+
+    my $results = SyncML::Message::Command->new('Results');
+    $self->out_message->stamp_command_id($results);
+
+    $results->message_reference($self->in_message->message_id);
+    $results->command_reference($command->command_id);
+
+    $results->target_reference($command->target_uri) if defined_and_length($command->target_uri);
+    $results->source_reference($command->source_uri) if defined_and_length($command->source_uri);
+
+    $results->source_uri('./devinf11');
+    
+    $results->include_device_info(1);
+
+    push @{ $self->out_message->commands }, $results;
+} 
+
 sub handle_map {
     my $self = shift;
     my $command = shift;
@@ -225,6 +249,7 @@ sub handle_sync {
 	$self->out_message->stamp_command_id($replace);
 
 	my $calendar = Data::ICal->new;
+	$calendar->add_property('version' => '1.0');
 	my $todo = Data::ICal::Entry::Todo->new;
 	$todo->add_properties(
 	    summary => $db->{current}{$luid}{summary},
@@ -235,10 +260,10 @@ sub handle_sync {
 	push @{ $replace->items }, {
 	    target_uri => $luid,
 	    data => $calendar->as_string,
-	    meta => {
-		Type => "text/x-vcalendar",
-	    } 
 	}; 
+	$replace->meta_hash({
+		Type => "text/x-vcalendar",
+	}); 
     	push @{ $response_sync->subcommands }, $replace;
     } 
     for my $temp_guid (keys %{ $db->{'future'} }) {
@@ -246,6 +271,7 @@ sub handle_sync {
 	$self->out_message->stamp_command_id($add);
 
 	my $calendar = Data::ICal->new;
+	$calendar->add_property('version' => '1.0');
 	my $todo = Data::ICal::Entry::Todo->new;
 	$todo->add_properties(
 	    summary => $db->{future}{$temp_guid}{summary},
@@ -256,10 +282,10 @@ sub handle_sync {
 	push @{ $add->items }, {
 	    source_uri => $temp_guid,
 	    data => $calendar->as_string,
-	    meta => {
-		Type => "text/x-vcalendar",
-	    } 
 	}; 
+	$add->meta_hash({
+		Type => "text/x-vcalendar",
+	}); 
     	push @{ $response_sync->subcommands }, $add;
     } 
     for my $luid (keys %{ $db->{'dead'} }) {
