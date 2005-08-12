@@ -187,7 +187,7 @@ sub as_xml {
 			$x->LocURI($self->source_uri);
 		    }) if defined_and_length $self->source_uri;
 		    $x->Data(sub {
-			$x->_x($self->_devinfo_twig->sprint);
+			$x->_x($self->_devinfo);
 		    }) if $self->include_device_info;
 		});
 	    } 
@@ -334,36 +334,39 @@ sub _new_from_twig {
     return $self;
 } 
 
-sub _devinfo_twig {
+sub _devinfo {
     my $self = shift;
 
-    my $devinf = XML::Twig::Elt->new('DevInf');
-    XML::Twig::Elt->new('VerDTD', '1.1')->paste_last_child($devinf);
-    XML::Twig::Elt->new('Man', 'bps')->paste_last_child($devinf);
-    XML::Twig::Elt->new('Mod', 'SyncML::Engine')->paste_last_child($devinf);
-    XML::Twig::Elt->new('SwV', '0.1')->paste_last_child($devinf);
-    XML::Twig::Elt->new('HwV', 'perl')->paste_last_child($devinf);
-    XML::Twig::Elt->new('DevID', 'xyzzy')->paste_last_child($devinf);
-    XML::Twig::Elt->new('DevTyp', 'server')->paste_last_child($devinf);
+    my $x = XML::Builder->new;
 
-    my $tasks = XML::Twig::Elt->new('DataStore');
-    $tasks->paste_last_child($devinf);
-    XML::Twig::Elt->new('SourceRef', './tasks')->paste_last_child($tasks);
-    XML::Twig::Elt->new('DisplayName', 'Tasks')->paste_last_child($tasks);
-    my $rxpref = XML::Twig::Elt->new('Rx-Pref');
-    $rxpref->paste_last_child($tasks);
-    XML::Twig::Elt->new('CTType', 'text/calendar')->paste_last_child($rxpref);
-    XML::Twig::Elt->new('VerCT', '2.0')->paste_last_child($rxpref);
-    my $txpref = XML::Twig::Elt->new('Tx-Pref');
-    $txpref->paste_last_child($tasks);
-    XML::Twig::Elt->new('CTType', 'text/calendar')->paste_last_child($txpref);
-    XML::Twig::Elt->new('VerCT', '2.0')->paste_last_child($txpref);
-    my $synccap = XML::Twig::Elt->new('SyncCap');
-    $synccap->paste_last_child($tasks);
-    XML::Twig::Elt->new('SyncType', '1')->paste_last_child($synccap);
-    XML::Twig::Elt->new('SyncType', '2')->paste_last_child($synccap);
+    $x->DevInf(xmlns => "syncml:devinf", sub {
+	$x->VerDTD("1.1");
+	$x->Man('bps');
+	$x->Mod('SyncML::Engine');
+	$x->SwV('0.1');
+	$x->HwV('perl');
+	$x->DevID('xyzzy');
+	$x->DevTyp('server');
 
-    return $devinf;
+	$x->DataStore(sub{
+	    $x->SourceRef('./tasks');
+	    $x->DisplayName('Tasks');
+	    $x->_elt('Rx-Pref', sub {
+		$x->CTType('text/calendar');
+		$x->VerCT('2.0');
+	    });
+	    $x->_elt('Tx-Pref', sub {
+		$x->CTType('text/calendar');
+		$x->VerCT('2.0');
+	    });
+	    $x->SyncCap(sub{
+		$x->SyncType('1');
+		$x->SyncType('2');
+	    });
+	});
+    });
+
+    return $x->_output;
 } 
 
 =head1 DIAGNOSTICS
