@@ -152,8 +152,11 @@ sub handle_alert {
 
     $status->status_code(200);
 
-    die unless @{ $command->items } == 1;
-    die unless $command->alert_code == 200;
+    unless (@{ $command->items } == 1 and ($command->alert_code == 200 or $command->alert_code == 201)) {
+	warn "items or alert code wrong";
+	$status->status_code(500);
+	return;
+    } 
 
     my $item = $command->items->[0];
 

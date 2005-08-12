@@ -115,6 +115,8 @@ __PACKAGE__->mk_accessors(qw/command_name command_id no_response items subcomman
 			     message_reference command_reference 
 			     command_name_reference target_reference source_reference status_code alert_code/);
 
+sub defined_and_length { defined $_[0] and length $_[0] }
+
 =head2 new [$command_name]
 
 Creates a new L<SyncML::Message::Command>, with command name C<$command_name> if it's given.
@@ -158,8 +160,10 @@ sub _as_twig {
 	XML::Twig::Elt->new('CmdRef', $self->command_reference)->paste_last_child($command);
 	XML::Twig::Elt->new('Cmd', $self->command_name_reference)->paste_last_child($command);
 
-	XML::Twig::Elt->new('TargetRef', $self->target_reference)->paste_last_child($command);
-	XML::Twig::Elt->new('SourceRef', $self->source_reference)->paste_last_child($command);
+	XML::Twig::Elt->new('TargetRef', $self->target_reference)->paste_last_child($command)
+	    if defined_and_length($self->target_reference);
+	XML::Twig::Elt->new('SourceRef', $self->source_reference)->paste_last_child($command)
+	    if defined_and_length($self->source_reference);
 	
 	XML::Twig::Elt->new('Data', $self->status_code)->paste_last_child($command);
     } else {

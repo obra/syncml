@@ -11,6 +11,7 @@ use HTTP::Response;
 use SyncML::Message;
 use SyncML::Engine;
 use Sys::HostIP;
+use XML::WBXML::SyncML;
 
 =head1 NAME
 
@@ -44,7 +45,14 @@ sub handle_request {
     my $resp = HTTP::Response->new(200);
     $resp->protocol("HTTP/1.1");
 
-    my $in_message = SyncML::Message->new_from_xml($cgi->param('POSTDATA'));
+    my $using_wbxml = $cgi->content_type eq 'application/vnd.syncml+wbxml';
+
+    my $input = $cgi->param('POSTDATA');
+    if ($using_wbxml) {
+	$input = XML::WBXML::SyncML::wbxml_to_xml($input);
+    }
+
+    my $in_message = SyncML::Message->new_from_xml($input);
 
     return unless $in_message; # should do some sort of output I guess
 
@@ -68,7 +76,12 @@ sub handle_request {
 
     delete $self->engines->{ $engine->internal_session_id } if $engine->done;
 
-    $resp->content($out_message->as_xml);
+    my $output = $out_message->as_xml;
+    if ($using_wbxml) {
+	$output = XML::WBXML::SyncML::xml_to_wbxml($output);
+    } 
+    
+    $resp->content($output);
     $resp->content_length(length $resp->content);
     $resp->content_type('application/vnd.syncml+xml');
 
