@@ -47,6 +47,12 @@ my %COMMAND_HANDLERS = (
     Sync => 'handle_sync',
     Map => 'handle_map',
     Get => 'handle_get',
+    Add => 'handle_add_or_replace',
+    Replace => 'handle_add_or_replace',
+);
+
+my %POST_SUBCOMMAND_HANDLERS = (
+    Sync => 'handle_ps_sync',
 );
 
 sub new {
@@ -86,19 +92,36 @@ sub respond_to_message {
     $self->add_status_for_header(200);
 
     for my $command (@{ $in_message->commands }) {
-	# The following method call does insert the status object into the
-	# output message, but any modifications to it will still be effective
-	my $status = $self->add_status_for_command($command);
-
-	if (my $handler = $COMMAND_HANDLERS{ $command->command_name }) {
-	    $self->$handler($command, $status);
-	} else {
-	    $status->status_code(200);
-	} 
+	$self->respond_to_command($command);
     } 
 
     return $out_message;
 }
+
+sub respond_to_command {
+    my $self = shift;
+    my $command = shift;
+
+    # The following method call inserts the status object into the output
+    # message. But note that if you later modify the status object, the
+    # modification will in fact show up in the output message (as you'd
+    # hope).
+    my $status = $self->add_status_for_command($command);
+
+    if (my $handler = $COMMAND_HANDLERS{ $command->command_name }) {
+	$self->$handler($command, $status);
+    } else {
+	$status->status_code(200);
+    } 
+
+    for my $subcommand (@{ $command->subcommands }) {
+	$self->respond_to_command($subcommand);
+    } 
+
+    if (my $handler = $POST_SUBCOMMAND_HANDLERS{ $command->command_name }) {
+	$self->$handler($command);
+    } 
+} 
 
 sub add_status_for_header {
     my $self = shift;
@@ -243,28 +266,86 @@ sub handle_sync {
     $response_sync->target_uri( $command->source_uri );
     $response_sync->source_uri( $command->target_uri );
 
+    $self->response_sync($response_sync);
+
+    # Clear out our understanding of the client's database, which we'll restore
+    # from its slow sync response in handle_add_or_replace
+    $self->client_database({});
+} 
+
+sub handle_add_or_replace {
+    my $self = shift;
+    my $command = shift;
+    my $status = shift;
+
+    for my $item (@{ $command->items }) {
+	my $content = $item->{'data'};
+	my $luid = $item->{'source_uri'};
+	
+	unless (defined $luid and length $luid) {
+	    warn "told to add/replace an item, but no luid!";
+	    next;
+	} 
+
+	# should use Data::ICal, but it doesn't work from a string, just a file!
+	my ($summary) = $content =~ /SUMMARY:(.+)/;
+	
+	unless (defined $summary and length $summary) {
+	    warn "no summary for $luid!";
+	    next;
+	} 
+	$self->client_database->{$luid} = { summary => $summary };
+    } 
+
+    $status->status_code(200);
+} 
+
+sub handle_ps_sync {
+    my $self = shift;
+    my $command = shift;
+
+    warn YAML::Dump $self->client_database;
+
+    my $response_sync = $self->response_sync;
+
     my $db = YAML::LoadFile($self->yaml_database);
     for my $luid (keys %{ $db->{'current'} }) {
-	my $replace = SyncML::Message::Command->new('Replace');
-	$self->out_message->stamp_command_id($replace);
+	if ($self->client_database->{$luid}) {
+	    # client has it.  so do we.  for now,
+	    # don't check if they're the same.
+	    #
+	    # good logic would be: if the same, do nothing;
+	    # if different, try to figure out who wins.
+	    #
+	    # instead we just make sure client has what server has.
+	   
+	    $self->client_database->{$luid}{'PROCESSED'} = 1;
 
-	my $calendar = Data::ICal->new;
-	$calendar->add_property('version' => '1.0');
-	my $todo = Data::ICal::Entry::Todo->new;
-	$todo->add_properties(
-	    summary => $db->{current}{$luid}{summary},
-	    status => "NEEDS_ACTION",
-	);
-	$calendar->add_entry($todo);
+	    my $replace = SyncML::Message::Command->new('Replace');
+	    $self->out_message->stamp_command_id($replace);
 
-	push @{ $replace->items }, {
-	    target_uri => $luid,
-	    data => $calendar->as_string,
-	}; 
-	$replace->meta_hash({
-		Type => "text/x-vcalendar",
-	}); 
-    	push @{ $response_sync->subcommands }, $replace;
+	    my $calendar = Data::ICal->new;
+	    $calendar->add_property('version' => '1.0');
+	    my $todo = Data::ICal::Entry::Todo->new;
+	    $todo->add_properties(
+		summary => $db->{current}{$luid}{summary},
+		status => "NEEDS_ACTION",
+	    );
+	    $calendar->add_entry($todo);
+
+	    push @{ $replace->items }, {
+		target_uri => $luid,
+		data => $calendar->as_string,
+	    }; 
+	    $replace->meta_hash({
+		    Type => "text/x-vcalendar",
+	    }); 
+	    push @{ $response_sync->subcommands }, $replace;
+	} else {
+	    # We have it, client doesn't.  Clearly the client deleted it.
+	    # We should, too.
+	    delete $db->{'current'}{$luid};
+	} 
     } 
     for my $temp_guid (keys %{ $db->{'future'} }) {
 	my $add = SyncML::Message::Command->new('Add');
@@ -289,6 +370,10 @@ sub handle_sync {
     	push @{ $response_sync->subcommands }, $add;
     } 
     for my $luid (keys %{ $db->{'dead'} }) {
+	next unless $self->client_database->{$luid};
+
+	$self->client_database->{$luid}{'PROCESSED'} = 1;
+
 	my $delete = SyncML::Message::Command->new('Delete');
 	$self->out_message->stamp_command_id($delete);
 
@@ -298,11 +383,25 @@ sub handle_sync {
     	push @{ $response_sync->subcommands }, $delete;
     } 
     $db->{'dead'} = {}; # forget about them
+    
+    # now deal with client adds -- they're anything the client
+    # has that we didn't have before or want deleted!
+    
+    for my $luid (keys %{ $self->client_database }) {
+	next if $self->client_database->{$luid}{'PROCESSED'};
+
+	my $client_item = $self->client_database->{$luid};
+
+	$db->{'current'}{$luid} = {
+	    summary => $client_item->{'summary'},
+	};
+    } 
+    
     YAML::DumpFile($self->yaml_database, $db);
 } 
 
 __PACKAGE__->mk_accessors(qw/session_id internal_session_id last_message_id uri_base in_message out_message
-    anchor done yaml_database/);
+    anchor done yaml_database client_database response_sync/);
 
 sub defined_and_length { defined $_[0] and length $_[0] }
 
