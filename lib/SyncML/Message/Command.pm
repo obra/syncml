@@ -146,125 +146,109 @@ Returns the command as an XML string.
 
 sub as_xml {
     my $self = shift;
-    $self->_as_twig->sprint;
-} 
 
-sub _as_twig {
-    my $self = shift;
-
-    my $command = XML::Twig::Elt->new($self->command_name);
-    $command->set_pretty_print('indented');
-
-    XML::Twig::Elt->new('CmdID', $self->command_id)->paste(last_child => $command);
+    my $x = XML::Builder->new;
     
-    if ($self->meta_hash and %{ $self->meta_hash }) {
-	my $meta = XML::Twig::Elt->new('Meta');
-	my $anchor = XML::Twig::Elt->new('Anchor');
-	while (my ($k, $v) = each %{ $self->meta_hash }) {
-	    if ($k =~ s/^Anchor//) {
-		XML::Twig::Elt->new($k, $v)->paste_last_child($anchor);
-	    } else {
-		XML::Twig::Elt->new($k, $v)->paste_last_child($meta);
-	    } 
-	} 
-	$anchor->paste_last_child($meta) if $anchor->has_children;
-	for my $metinf ($meta->children) {
-	    # Yes, this is 'xmlns', not 'xml:ns'.  SyncML is weird like
-	    # that.
-	    $metinf->set_att(xmlns => "syncml:metinf");
-	} 
-	$meta->paste_last_child($command);
-    }
+    $x->_elt($self->command_name, sub {
+	$x->CmdID($self->command_id);
 
-    if ($self->command_name eq 'Status' or $self->command_name eq 'Results') {
-	XML::Twig::Elt->new('MsgRef', $self->message_reference)->paste_last_child($command);
-	XML::Twig::Elt->new('CmdRef', $self->command_reference)->paste_last_child($command);
-	XML::Twig::Elt->new('Cmd', $self->command_name_reference)->paste_last_child($command)
-	    if $self->command_name eq 'Status';
-
-	XML::Twig::Elt->new('TargetRef', $self->target_reference)->paste_last_child($command)
-	    if defined_and_length($self->target_reference);
-	XML::Twig::Elt->new('SourceRef', $self->source_reference)->paste_last_child($command)
-	    if defined_and_length($self->source_reference);
-	
-	if ($self->command_name eq 'Status') {
-	    XML::Twig::Elt->new('Data', $self->status_code)->paste_last_child($command);
-	} else {
-	    my $item = XML::Twig::Elt->new('Item');
-	    $item->paste_last_child($command);
-	    if (defined_and_length($self->source_uri)) {
-		my $source = XML::Twig::Elt->new('Source');
-		XML::Twig::Elt->new('LocURI', $self->source_uri)->paste_last_child($source);
-		$source->paste_last_child($item);
-	    } 
-	    if ($self->include_device_info) {
-		my $data = XML::Twig::Elt->new('Data');
-		$data->paste_last_child($item);
-		my $devinfo_twig = $self->_devinfo_twig;
-		$devinfo_twig->paste_last_child($data);
-	    } 
-	} 
-    } else {
-	XML::Twig::Elt->new('NoResp')->paste_last_child($command) if $self->no_response;
-	XML::Twig::Elt->new('Data', $self->alert_code)->paste_last_child($command) if $self->command_name eq 'Alert';
-	if ($self->command_name eq 'Map' or $self->command_name eq 'Sync') {
-	    my $target = XML::Twig::Elt->new('Target');
-	    my $source = XML::Twig::Elt->new('Source');
-	    $target->paste_last_child($command);
-	    $source->paste_last_child($command);
-
-	    XML::Twig::Elt->new('LocURI', $self->target_uri)->paste($target);
-	    XML::Twig::Elt->new('LocURI', $self->source_uri)->paste($source);
-	} 
-    } 
-
-    for my $subcommand (@{ $self->subcommands }) {
-	$subcommand->_as_twig->paste_last_child($command);
-    } 
-    
-    my $is_map = $self->command_name eq 'Map';
-
-    for my $item (@{ $self->items }) {
-	my $item_twig = XML::Twig::Elt->new($is_map ? 'MapItem' : 'Item');
-	if (defined $item->{'target_uri'}) {
-	    my $e = XML::Twig::Elt->new('Target');
-	    XML::Twig::Elt->new('LocURI', $item->{'target_uri'})->paste($e);
-	    $e->paste_last_child($item_twig);
-	}
-	if (defined $item->{'source_uri'}) {
-	    my $e = XML::Twig::Elt->new('Source');
-	    XML::Twig::Elt->new('LocURI', $item->{'source_uri'})->paste($e);
-	    $e->paste_last_child($item_twig);
-	}
-
-	unless ($is_map) {
-	    XML::Twig::Elt->new('Data', $item->{'data'})->paste_last_child($item_twig)
-		if defined $item->{'data'};
-	    if ($item->{'meta'} and %{ $item->{'meta'} }) {
-		# bad hack: status probably gets to have meta too
-		my $meta = XML::Twig::Elt->new($self->command_name eq 'Status' ? 'Data' : 'Meta');
-		my $anchor = XML::Twig::Elt->new('Anchor');
-		while (my ($k, $v) = each %{ $item->{'meta'} }) {
-		    if ($k =~ s/^Anchor//) {
-			XML::Twig::Elt->new($k, $v)->paste_last_child($anchor);
-		    } else {
-			XML::Twig::Elt->new($k, $v)->paste_last_child($meta);
-		    } 
+	if ($self->meta_hash and %{ $self->meta_hash }) {
+	    my %mh = %{ $self->meta_hash };
+	    $x->Meta(sub{
+		if (defined $mh{'AnchorNext'} or defined $mh{'AnchorLast'}) {
+		    $x->Anchor(xmlns => 'syncml:metinf', sub {
+			$x->Next($mh{'AnchorNext'}) if defined $mh{'AnchorNext'};
+			$x->Last($mh{'AnchorLast'}) if defined $mh{'AnchorLast'};
+		    }); 
 		} 
-		$anchor->paste_last_child($meta) if $anchor->has_children;
-		for my $metinf ($meta->children) {
+		while (my ($k, $v) = each %mh) {
+		    next if $k =~ /^Anchor/;
 		    # Yes, this is 'xmlns', not 'xml:ns'.  SyncML is weird like
 		    # that.
-		    $metinf->set_att(xmlns => "syncml:metinf");
+		    $x->_elt($k, xmlns => 'syncml:metinf', $v);
 		} 
-		$meta->paste_last_child($item_twig);
-	    }
-	}
+	    });
+	} 
 
-	$item_twig->paste_last_child($command);
-    } 
+	if ($self->command_name eq 'Status' or $self->command_name eq 'Results') {
+	    $x->MsgRef($self->message_reference);
+	    $x->CmdRef($self->command_reference);
+	    $x->Cmd($self->command_name_reference) if $self->command_name eq 'Status';
+	    $x->TargetRef($self->target_reference)
+		if defined_and_length($self->target_reference);
+	    $x->SourceRef($self->source_reference)
+		if defined_and_length($self->source_reference);
 
-    return $command;
+	    if ($self->command_name eq 'Status') {
+		$x->Data($self->status_code);
+	    } else { # Results
+		$x->Item(sub {
+		    $x->Source(sub {
+			$x->LocURI($self->source_uri);
+		    }) if defined_and_length $self->source_uri;
+		    $x->Data(sub {
+			$x->_x($self->_devinfo_twig->sprint);
+		    }) if $self->include_device_info;
+		});
+	    } 
+	} else { # not Status or Results: a real command
+	    $x->NoResp if $self->no_response;
+	    $x->Data($self->alert_code) if $self->command_name eq 'Alert';
+	    if ($self->command_name eq 'Map' or $self->command_name eq 'Sync') {
+		$x->Target(sub{
+		    $x->LocURI($self->target_uri);
+		});
+		$x->Source(sub{
+		    $x->LocURI($self->source_uri);
+		});
+	    } 
+	} 
+
+	for my $subcommand (@{ $self->subcommands }) {
+	    $x->_x($subcommand->as_xml);
+	} 
+
+	my $is_map = $self->command_name eq 'Map';
+
+	# Handle Items / MapItems
+	for my $item (@{ $self->items }) {
+	    my $tagname = $is_map ? 'MapItem' : 'Item';
+	    $x->$tagname(sub {
+		$x->Target(sub{
+		    $x->LocURI($item->{'target_uri'});
+		}) if defined $item->{'target_uri'};
+		$x->Source(sub{
+		    $x->LocURI($item->{'source_uri'});
+		}) if defined $item->{'source_uri'};
+
+		unless ($is_map) {
+		    $x->Data($item->{'data'}) if defined $item->{'data'};
+
+		    if ($item->{'meta'} and %{ $item->{'meta'} }) {
+			my %mh = %{ $item->{'meta'} };
+			# bad hack: status probably gets to have Meta too
+			my $tagname = $self->command_name eq 'Status' ? 'Data' : 'Meta';
+			$x->$tagname(sub{
+			    if (defined $mh{'AnchorNext'} or defined $mh{'AnchorLast'}) {
+				$x->Anchor(xmlns => 'syncml:metinf', sub {
+				    $x->Next($mh{'AnchorNext'}) if defined $mh{'AnchorNext'};
+				    $x->Last($mh{'AnchorLast'}) if defined $mh{'AnchorLast'};
+				}); 
+			    } 
+			    while (my ($k, $v) = each %mh) {
+				next if $k =~ /^Anchor/;
+				# Yes, this is 'xmlns', not 'xml:ns'.  SyncML is weird like
+				# that.
+				$x->_elt($k, xmlns => 'syncml:metinf', $v);
+			    } 
+			});
+		    } 
+		} 
+	    });
+	} 
+    });
+    
+    return $x->_output;
 } 
 
 =head2 new_from_xml $string

@@ -33,13 +33,21 @@ sub AUTOLOAD {
     return if $tag eq 'DESTROY';
 
     my $self = shift;
+    $self->_elt($tag, @_);
+}
 
+sub _elt {
+    my $self = shift;
+    my $tag = shift;
+
+    my $has_content = @_ % 2;
+    
     my $content;
-    $content = pop @_ if @_ % 2;
+    $content = pop @_ if $has_content;
     
     my %attrs = @_;
     
-    if ($content) {
+    if ($has_content) {
 	$self->{'writer'}->startTag($tag, %attrs);
 	UNIVERSAL::isa($content, 'CODE') ?  $content->() : $self->_t($content);
 	$self->{'writer'}->endTag($tag);
