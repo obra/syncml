@@ -3,23 +3,27 @@ use warnings;
 
 package XML::Builder;
 
+use XML::Writer;
+
 sub new {
-    bless {out => '', level => 0}, shift;
+    my $self = bless {out => ''}, shift;
+    # unsafe is necessary for ->_x
+    $self->{'writer'} = XML::Writer->new(OUTPUT => \ ($self->{'out'}), UNSAFE => 1);
+    $self;
 } 
 
-sub _output {
-    my $self = shift;
-    $self->{'out'} .= (' ' x $self->{'level'}) . shift() . "\n" if @_;
-    $self->{'out'};
-} 
+sub _output { shift->{'out'} } 
 
 sub _t {
     my $self = shift;
     my $text = shift;
-    $text =~ s/\&/&amp;/g;
-    $text =~ s/</&lt;/g;
-    $text =~ s/>/&gt;/g;
-    $self->_output($text);
+    $self->{'writer'}->characters($text);
+} 
+
+sub _x {
+    my $self = shift;
+    my $text = shift;
+    $self->{'writer'}->raw($text);
 } 
 
 sub AUTOLOAD {
@@ -34,18 +38,14 @@ sub AUTOLOAD {
     $content = pop @_ if @_ % 2;
     
     my %attrs = @_;
-    my $attrstring = join ' ', map { qq($_="$attrs{$_}") } keys %attrs;
-    $attrstring = " $attrstring" if $attrstring;
-    
-    my $maybe_end = $content ? '' : '/';
-    $self->_output("<$tag$attrstring$maybe_end>");
     
     if ($content) {
-	$self->{'level'}++;
+	$self->{'writer'}->startTag($tag, %attrs);
 	UNIVERSAL::isa($content, 'CODE') ?  $content->() : $self->_t($content);
-	$self->{'level'}--;
-	$self->_output("</$tag>");
-    }
+	$self->{'writer'}->endTag($tag);
+    } else {
+	$self->{'writer'}->emptyTag($tag, %attrs);
+    } 
 } 
 
 1;

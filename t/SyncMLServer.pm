@@ -5,6 +5,8 @@ use warnings;
 use Test::More;
 use base qw/t::SyncML/;
 
+use Sys::HostIP;
+
 sub start_server : Test(startup => 6) {
     my $self = shift;
     use_ok 'Test::HTTP::Server::Simple';
@@ -21,6 +23,8 @@ sub start_server : Test(startup => 6) {
     isa_ok($self->{server}, 'Test::HTTP::Server::Simple');
 
     $self->{URL} = $self->{server}->started_ok;
+    my $ip = hostip;
+    $self->{URL} =~ s{/localhost\b}{/$ip};
 
 } 
 

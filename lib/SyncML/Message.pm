@@ -9,6 +9,7 @@ use base qw/Class::Accessor/;
 
 use Carp;
 use XML::Twig;
+use XML::Builder;
 
 use SyncML::Message::Command;
 
@@ -126,49 +127,32 @@ specification does not require it to.)
 sub as_xml {
     my $self = shift;
 
-    my $message = XML::Twig::Elt->new('SyncML');
-    $message->set_pretty_print('indented');
-    my $head = XML::Twig::Elt->new('SyncHdr');
-    $head->paste_last_child($message);
-    my $body = XML::Twig::Elt->new('SyncBody');
-    $body->paste_last_child($message);
-
-    XML::Twig::Elt->new('VerDTD', '1.1')->paste_last_child($head);
-    XML::Twig::Elt->new('VerProto', 'SyncML/1.1')->paste_last_child($head);
-
-    XML::Twig::Elt->new('SessionID', $self->session_id)->paste_last_child($head);
-    XML::Twig::Elt->new('MsgID', $self->message_id)->paste_last_child($head);
-
-    XML::Twig::Elt->new('RespURI', $self->response_uri)->paste_last_child($head)
-	if $self->response_uri;
-    
-    {
-	my $target = XML::Twig::Elt->new('Target');
-	$target->paste_last_child($head);
-
-	XML::Twig::Elt->new('LocURI', $self->target_uri)->paste_last_child($target);
-	XML::Twig::Elt->new('LocName', $self->target_name)->paste_last_child($target)
-	    if defined $self->target_name;
-    } 
-
-    {
-	my $source = XML::Twig::Elt->new('Source');
-	$source->paste_last_child($head);
-
-	XML::Twig::Elt->new('LocURI', $self->source_uri)->paste_last_child($source);
-	XML::Twig::Elt->new('LocName', $self->source_name)->paste_last_child($source)
-	    if defined $self->source_name;
-    } 
-
-    XML::Twig::Elt->new('NoResp')->paste_last_child($head) if $self->no_response;
-
-    for my $command (@{ $self->commands }) {
-	$command->_as_twig->paste_last_child($body);
-    } 
-    
-    XML::Twig::Elt->new('Final')->paste_last_child($body) if $self->final;
-
-    return $message->sprint;
+    my $x = XML::Builder->new;
+    $x->SyncML(sub{
+	$x->SyncHdr(sub{
+	    $x->VerDTD('1.1');
+	    $x->VerProto('SyncML/1.1');
+	    $x->SessionID($self->session_id);
+	    $x->MsgID($self->message_id);
+	    $x->RespURI($self->response_uri) if $self->response_uri;
+	    $x->Target(sub{
+		$x->LocURI($self->target_uri);
+		$x->LocName($self->target_name) if defined $self->target_name;
+	    });
+	    $x->Source(sub{
+		$x->LocURI($self->source_uri);
+		$x->LocName($self->source_name) if defined $self->source_name;
+	    });
+	    $x->NoResp if $self->no_response;
+	});
+	$x->SyncBody(sub{
+	    for my $command (@{ $self->commands }) {
+		$x->_x($command->as_xml);
+	    } 
+	    $x->Final if $self->final;
+	});
+    });
+    return $x->_output;
 } 
 
 =head2 stamp_command_id $command
