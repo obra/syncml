@@ -2,9 +2,6 @@
 12345:
   last_modified: 1124149598
   summary: 'Addition from client '
-555:
-  last_modified: 1124149598
-  summary: Bla bar baz
 666:
   last_modified: 1124149598
   summary: Today from the server
@@ -14,3 +11,6 @@
 777:
   last_modified: 1124150942
   summary: bla bla
+7325:
+  last_modified: 1239840234
+  summary: this is added

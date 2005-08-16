@@ -236,10 +236,10 @@ sub handle_map {
     my $command = shift;
     my $status = shift;
 
+    my $db;
+
     # Map commands happen only in the final package, so mark the engine as done.
     $self->done(1);
-
-    my $db = self->get_current_dead_future_changed;
 
     for my $item (@{ $command->items }) {
 	my $luid = $item->{source_uri};
@@ -313,6 +313,8 @@ sub handle_ps_sync {
     warn YAML::Dump $self->client_database;
 
     my $response_sync = $self->response_sync;
+    $self->get_current_dead_future_changed;
+
 my $db;
     for my $luid (keys %{ $db->{'current'} }) {
 	if ($self->client_database->{$luid}) {
@@ -491,12 +493,65 @@ sub save_sync_database {
     YAML::DumpFile($SYNC_DATABASE, {'devicename-username-dbname' => $database_info });
 }
 
+# this method has a really stupid name, mostly because it will die soon after
+# being written
+sub get_current_dead_future_changed {
+    my $self = shift;
+
+    my $sync_db = $self->get_sync_database;
+    my $app_db = $self->get_application_database;
+
+    # go through app db put things in either current changed or future depending
+    # on existence in sync db and timestamp; delete from sync db while going on
+    #
+    # put the rest of sync db in dead
+    #
+    # but what should the contents of these fields be?  well, we'll still need
+    # LUID but won't need last-mod, so obviously they should be SyncDBEntrys
+    #
+    # so maybe actually what needs to be done is:
+
+    # initialize the hashes
+    $self->$_({}) for qw/current dead future changed/;
+    
+    # For each of the entries that the client had last time we heard from
+    # them...
+    for my $client_id (keys %$sync_db) {
+	my $sync_db_entry = $sync_db->{$client_id};
+	
+	# Do we still have it?
+	if (my $syncable_item = delete $app_db->{ $sync_db_entry->application_identifier }) {
+	    if ($syncable_item->last_modified_as_seconds > $self->last_sync_seconds) {
+		# Yes, but it's been dirtied.
+		$self->changed->{$client_id} = $sync_db_entry;
+	    } else {
+		# Yes, and we haven't touched it.
+		$self->current->{$client_id} = $sync_db_entry;
+	    } 
+	} else {
+	    # Nope, must have deleted it.
+	    $self->dead->{$client_id} = $sync_db_entry;
+	} 
+    }
+
+    # For each of the entries that we have but that the client didn't have last
+    # time (ie, that weren't hit by the 'delete' above)
+    while (my ($application_id, $syncable_item) = each %$app_db) {
+	$self->future->{$application_id} = $syncable_item;
+    } 
+
+    warn YAML::Dump $self;
+} 
+
 __PACKAGE__->mk_accessors(qw/session_id internal_session_id last_message_id uri_base in_message out_message
     anchor done client_database response_sync
     
     my_last_anchor client_last_anchor last_sync_seconds
     
     current dead future changed/);
+
+# note that current and changed and dead are hashes of SyncDBEntrys, whereas
+# future is a hash of SyncableItems
 
 sub defined_and_length { defined $_[0] and length $_[0] }
 
