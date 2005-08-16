@@ -233,7 +233,7 @@ sub handle_map {
     # Map commands happen only in the final package, so mark the engine as done.
     $self->done(1);
 
-    my $db = YAML::LoadFile($self->yaml_database);
+    my $db = self->get_syncables;
 
     for my $item (@{ $command->items }) {
 	my $luid = $item->{source_uri};
@@ -247,7 +247,7 @@ sub handle_map {
 	$db->{'current'}{$luid} = delete $db->{'future'}{$temp_guid};
     } 
 
-    YAML::DumpFile($self->yaml_database, $db);
+    $self->save_syncables($db);
 
     $status->status_code(200);
 } 
@@ -310,7 +310,7 @@ sub handle_ps_sync {
 
     my $response_sync = $self->response_sync;
 
-    my $db = YAML::LoadFile($self->yaml_database);
+    my $db = $self->get_syncables;
     for my $luid (keys %{ $db->{'current'} }) {
 	if ($self->client_database->{$luid}) {
 	    # client has it.  so do we.  for now,
@@ -399,6 +399,17 @@ sub handle_ps_sync {
 	};
     } 
     
+    $self->save_syncables($db);
+} 
+
+sub get_syncables {
+    my $self = shift;
+    return YAML::LoadFile($self->yaml_database);
+} 
+
+sub save_syncables {
+    my $self = shift;
+    my $db = shift;
     YAML::DumpFile($self->yaml_database, $db);
 } 
 
