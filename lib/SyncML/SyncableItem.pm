@@ -3,7 +3,7 @@ package SyncML::SyncableItem;
 use warnings;
 use strict;
 
-use base qw/Class::Accessor/;
+use base qw/Class::Accessor SyncML::ContentAsObject/;
 
 use Carp;
 use DateTime;
@@ -85,31 +85,12 @@ sub last_modified_as_seconds {
 
 =head2 content_as_object
 
-If the C<type> is a known type with an object representing it, returns the object
-representing it.
-
-If C<type> or C<content> is undefined, or C<type> is not known, or if C<content>
-is not a valid instance of its C<type>, returns undef.
-
-Known types and their classes:
-
-    text/calendar, text/x-vcalendar   Data::ICal
+Returns the object representing C<content> with type C<type>.
+See L<SyncML::ContentAsObject> for more information.
 
 =cut
 
-my %KNOWN_TYPE_CONSTRUCTORS = (
-    'text/calendar' => sub { Data::ICal->new(data => shift) },
-    'text/x-vcalendar' => sub { Data::ICal->new(data => shift) },
-);
-
-sub content_as_object {
-    my $self = shift;
-
-    return unless defined $self->content and defined $self->type;
-
-    return unless $KNOWN_TYPE_CONSTRUCTORS{ $self->type };
-    return $KNOWN_TYPE_CONSTRUCTORS{ $self->type }->($self->content);
-} 
+__PACKAGE__->mk_object_accessor(content_as_object => qw/content type/); 
 
 =head1 DIAGNOSTICS
 

@@ -1,87 +1,95 @@
-package SyncML::SyncDBEntry;
+package SyncML::ContentAsObject;
 
 use warnings;
 use strict;
-
-use base qw/Class::Accessor SyncML::ContentAsObject/;
 
 use Carp;
 use DateTime;
 use Data::ICal;
 
+use Sub::Installer;
+
 
 =head1 NAME
 
-SyncML::SyncDBEntry - Representation of client's copy of a syncable item
+SyncML::ContentAsObject - Mixin to provide MIME type-based object serialization
 
 
 =head1 SYNOPSIS
 
-    use SyncML::SyncDBEntry;
+    package SyncML::FooBar;
+    use base qw/SyncML::ContentAsObject Class::Accessor/;
+
+    # this is from Class::Accessor:
+    __PACKAGE__->mk_accessors(qw/item_content item_type/); 
+    # this is from SyncML::ContentAsObject:
+    __PACKAGE__->mk_object_accessor(item_content_as_object => qw/item_content item_type/);
+
+    $foobar->item_content("BEGIN:VCALENDAR...");
+    $foobar->item_type("text/calendar");
+    my $cal = $foobar->item_content_as_object; # isa Data::ICal
 
   
   
 =head1 DESCRIPTION
 
-A L<SyncML::SyncDBEntry> represents the information which is stored about what
-a client knows about a single synchronizable item, such as a to-do list
-task or an event.  The server keeps a database which can be represented as 
-L<SyncML::SyncDBEntry> objects.  Each object contains an object identifying
-the client (IMEI/URL, username, database name); the client's local identifier
-for the item; the application's identifier for the item; and the content and type of
-the item at the last time it was successfully synchronized with the client.
+L<SyncML::ContentAsObject> is a mixin to create C<foo_as_object> accessors for common
+SyncML data types.  Your class must inherit from it and call C<mk_object_accessor> at least once.
 
-The server uses the sync db to figure out what has changed on the server since the
-last synchronization, and in the case of the slow sync, it can help figure out
-what has changed on the client.
+Supported types:
+
+    text/calendar, text/x-vcalendar: Data::ICal
 
 =head1 METHODS
 
-=head2 new
+=cut
 
-Creates a new L<SyncML::SyncDBEntry>.
+=head2 mk_object_accessor $object_accessor_name, $content_accessor_name, $type_accessor_name
+
+This class method creates an accessor (read-only for now, but this should be
+fixed) called C<$object_accessor_name> in the class which converts the content found at
+C<$content_accessor_name> with MIME type found at C<$type_accessor_name> into an object 
+of the appropriate format.
+
+C<$content_accessor_name> and C<$type_accessor_name> should name standard L<Class::Accessor>-style
+accessors.
+
+If the type or content is undefined, or the type is not known, or if the content
+is not a valid instance of its type, the constructed accessor returns undef.
 
 =cut
 
-sub new {
+sub mk_object_accessor {
     my $class = shift;
-    my $self = bless {}, $class;
+    my $object_accessor_name = shift;
+    my $content_accessor_name = shift;
+    my $type_accessor_name = shift;
 
-    return $self;
+    $class->install_sub({ $object_accessor_name => sub {
+	my $self = shift;
+	return $self->__content_as_object($content_accessor_name, $type_accessor_name, @_);
+    }}); 
 } 
 
-=head2 content [$content]
 
-Gets or sets the content of the item.  This should be a string in a format indicated
-by the C<type> method.
+my %KNOWN_TYPE_CONSTRUCTORS = (
+    'text/calendar' => sub { Data::ICal->new(data => shift) },
+    'text/x-vcalendar' => sub { Data::ICal->new(data => shift) },
+);
 
-=head2 type [$type]
+sub __content_as_object {
+    my $self = shift;
+    my $content_accessor = shift;
+    my $type_accessor = shift;
 
-Gets or sets the MIME type of the object as a string; for example, C<text/calendar>.
+    my $content = $self->$content_accessor;
+    my $type    = $self->$type_accessor;
 
-=head2 application_identifier [$application_identifier]
+    return unless defined $content and defined $type;
 
-Gets or sets the identifier that the application uses to refer to the item; this is treated
-as an opaque string.  Generally this will be the primary key that the application uses to
-store the item in a database.
-
-=head2 client_identifier [$client_identifier]
-
-Gets or sets the identifier that the client uses to refer to the item; this is treated
-as an opaque string.
-
-=cut
-
-__PACKAGE__->mk_accessors(qw/content type application_identifier client_identifier/);
-
-=head2 content_as_object
-
-Returns the object representing C<content> with type C<type>.
-See L<SyncML::ContentAsObject> for more information.
-
-=cut
-
-__PACKAGE__->mk_object_accessor(content_as_object => qw/content type/); 
+    return unless $KNOWN_TYPE_CONSTRUCTORS{ $type };
+    return $KNOWN_TYPE_CONSTRUCTORS{ $type }->($content);
+} 
 
 =head1 DIAGNOSTICS
 
