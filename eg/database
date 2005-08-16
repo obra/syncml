@@ -1,14 +1,16 @@
 ---
-current:
-  134219802:
-    summary: 'Addition from client '
-  167778208:
-    summary: A <secondly> one or is it
-  201332975:
-    summary: Bla bar baz
-  33560386:
-    summary: Today from the server
-  67114789:
-    summary: bla bla
-dead: {}
-future: {}
+12345:
+  last_modified: 1124149598
+  summary: 'Addition from client '
+555:
+  last_modified: 1124149598
+  summary: Bla bar baz
+666:
+  last_modified: 1124149598
+  summary: Today from the server
+67890:
+  last_modified: 1124149598
+  summary: A <secondly> one or is it
+777:
+  last_modified: 1124150942
+  summary: bla bla

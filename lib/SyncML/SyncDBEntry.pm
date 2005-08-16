@@ -1,4 +1,4 @@
-package SyncML::SyncableItem;
+package SyncML::SyncDBEntry;
 
 use warnings;
 use strict;
@@ -12,27 +12,34 @@ use Data::ICal;
 
 =head1 NAME
 
-SyncML::SyncableItem - The application's representation of a syncable item
+SyncML::SyncDBEntry - Representation of client's copy of a syncable item
 
 
 =head1 SYNOPSIS
 
-    use SyncML::SyncableItem;
+    use SyncML::SyncDBEntry;
 
   
   
 =head1 DESCRIPTION
 
-A L<SyncML::SyncableItem> represents a single synchronizable item, such as a to-do list
-task or an event.  This class is used in the communication between the SyncML server and
-your application (not the client device).  It contains the (typed) content of the item,
-its application identifier, and a last modification date.
+A L<SyncML::SyncDBEntry> represents the information which is stored about what
+a client knows about a single synchronizable item, such as a to-do list
+task or an event.  The server keeps a database which can be represented as 
+L<SyncML::SyncDBEntry> objects.  Each object contains an object identifying
+the client (IMEI/URL, username, database name); the client's local identifier
+for the item; the application's identifier for the item; and the content and type of
+the item at the last time it was successfully synchronized with the client.
+
+The server uses the sync db to figure out what has changed on the server since the
+last synchronization, and in the case of the slow sync, it can help figure out
+what has changed on the client.
 
 =head1 METHODS
 
 =head2 new
 
-Creates a new L<SyncML::SyncableItem>.
+Creates a new L<SyncML::SyncDBEntry>.
 
 =cut
 
@@ -58,30 +65,14 @@ Gets or sets the identifier that the application uses to refer to the item; this
 as an opaque string.  Generally this will be the primary key that the application uses to
 store the item in a database.
 
-If the application identifier is undefined, then the L<SyncmL::SyncableItem> represents
-a request from the SyncML engine to the application to add the item to the database.
+=head2 client_identifier [$client_identifier]
 
-=head2 last_modified [$last_modified]
-
-Gets or sets the last modified time of the item, as a L<DateTime> object.  (This time should
-be calculated on the server; it should not be taken from anything the client sends.)
+Gets or sets the identifier that the client uses to refer to the item; this is treated
+as an opaque string.
 
 =cut
 
-__PACKAGE__->mk_accessors(qw/content type application_identifier last_modified/);
-
-=head2 last_modified_as_seconds [$last_modified_as_seconds]
-
-Gets or sets the last modified time of the item, as epoch seconds.
-
-=cut
-
-sub last_modified_as_seconds {
-    my $self = shift;
-    $self->last_modified( DateTime->from_epoch( epoch => shift ) ) if @_;
-    my $last_modified = $self->last_modified;
-    return $last_modified ? $last_modified->epoch : undef;
-} 
+__PACKAGE__->mk_accessors(qw/content type application_identifier client_identifier/);
 
 =head2 content_as_object
 
@@ -93,7 +84,7 @@ is not a valid instance of its C<type>, returns undef.
 
 Known types and their classes:
 
-    text/calendar, text/x-vcalendar   Data::ICal
+    text/calendar, text/xvcalendar   Data::ICal
 
 =cut
 

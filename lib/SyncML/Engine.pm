@@ -8,12 +8,18 @@ use base qw/Class::Accessor/;
 use Carp;
 use SyncML::Message;
 use SyncML::Message::Command;
+use SyncML::SyncableItem;
+use SyncML::SyncDBEntry;
 use Digest::MD5;
 use MIME::Base64 ();
 use YAML ();
 
 use Data::ICal;
 use Data::ICal::Entry::Todo;
+
+use FindBin;
+my $APPLICATION_DATABASE = "eg/database";
+my $SYNC_DATABASE = "eg/syncdb";
 
 
 =head1 NAME
@@ -233,7 +239,7 @@ sub handle_map {
     # Map commands happen only in the final package, so mark the engine as done.
     $self->done(1);
 
-    my $db = self->get_syncables;
+    my $db = self->get_current_dead_future_changed;
 
     for my $item (@{ $command->items }) {
 	my $luid = $item->{source_uri};
@@ -246,8 +252,6 @@ sub handle_map {
 
 	$db->{'current'}{$luid} = delete $db->{'future'}{$temp_guid};
     } 
-
-    $self->save_syncables($db);
 
     $status->status_code(200);
 } 
@@ -309,8 +313,7 @@ sub handle_ps_sync {
     warn YAML::Dump $self->client_database;
 
     my $response_sync = $self->response_sync;
-
-    my $db = $self->get_syncables;
+my $db;
     for my $luid (keys %{ $db->{'current'} }) {
 	if ($self->client_database->{$luid}) {
 	    # client has it.  so do we.  for now,
@@ -399,22 +402,101 @@ sub handle_ps_sync {
 	};
     } 
     
-    $self->save_syncables($db);
+    $self->write_current;
 } 
 
-sub get_syncables {
+sub get_application_database {
     my $self = shift;
-    return YAML::LoadFile($self->yaml_database);
+    my $db = YAML::LoadFile($APPLICATION_DATABASE);
+
+    for my $app_id (keys %$db) {
+	my $ic = Data::ICal->new;
+	my $todo = Data::ICal::Entry::Todo->new;
+	$ic->add_entry($todo);
+	$todo->add_properties(
+	    summary => $db->{$app_id}{summary},
+	);
+
+	my $syncitem = SyncML::SyncableItem->new;
+	$syncitem->application_identifier($app_id);
+	$syncitem->content($ic->as_string);
+	$syncitem->type("text/calendar");
+	$syncitem->last_modified_as_seconds($db->{$app_id}{last_modified});
+
+	$db->{$app_id} = $syncitem;
+    } 
+
+    return $db;
 } 
 
-sub save_syncables {
+sub save_application_database {
     my $self = shift;
     my $db = shift;
-    YAML::DumpFile($self->yaml_database, $db);
+
+    my $outdb = {};
+
+    for my $app_id (keys %$db) {
+	my $syncitem = $db->{$app_id};
+	my $ic = $syncitem->content_as_object;
+
+	$outdb->{$app_id} = {
+	    summary => $ic->entries->[0]->property("summary")->[0]->value,
+	    last_modified => $syncitem->last_modified_as_seconds,
+	}; 
+    } 
+    YAML::DumpFile($APPLICATION_DATABASE, $outdb);
 } 
 
+sub get_sync_database {
+    my $self = shift;
+    my $database_info = YAML::LoadFile($SYNC_DATABASE)->{'devicename-username-dbname'};
+
+    $self->$_($database_info->{$_}) for qw/my_last_anchor client_last_anchor last_sync_seconds/;
+
+    my $db = $database_info->{db};
+
+    for my $client_id (keys %$db) {
+	my $info = $db->{$client_id};
+	
+	my $syncdb = SyncML::SyncDBEntry->new;
+
+	$syncdb->application_identifier($info->{application_identifier});
+	$syncdb->content($info->{content});
+	$syncdb->type($info->{type});
+	$syncdb->client_identifier($client_id);
+
+	$db->{$client_id} = $syncdb;
+    } 
+
+    return $db;
+} 
+
+sub save_sync_database {
+    my $self = shift;
+    my $db = shift;
+
+    my $outdb = {};
+
+    for my $client_id (keys %$db) {
+	my $syncdb = $db->{$client_id};
+
+	$outdb->{$client_id} = {
+	    map { $_ => $syncdb->$_ } qw/application_identifier content type/
+	}; 
+    } 
+
+    my $database_info = {};
+    $database_info->{$_} = $self->$_ for qw/my_last_anchor client_last_anchor last_sync_seconds/;
+    $database_info->{db} = $outdb;
+    YAML::DumpFile($SYNC_DATABASE, {'devicename-username-dbname' => $database_info });
+}
+
 __PACKAGE__->mk_accessors(qw/session_id internal_session_id last_message_id uri_base in_message out_message
-    anchor done yaml_database client_database response_sync/);
+    anchor done client_database response_sync
+    
+    my_last_anchor client_last_anchor last_sync_seconds
+    
+    current dead future changed/);
 
 sub defined_and_length { defined $_[0] and length $_[0] }
 

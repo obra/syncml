@@ -67,7 +67,6 @@ sub handle_request {
 
     unless ($engine) {
 	$engine = SyncML::Engine->new;
-	$engine->yaml_database( $self->yaml_database );
 	$engine->uri_base("http://" . hostip . ":8080/");
 	$self->engines->{ $engine->internal_session_id } = $engine;
     } 
@@ -104,8 +103,6 @@ sub print_banner {
     my $self = shift;
     print "SyncML::SimpleServer: You can connect to your server at http://" . hostip . ":8080/\n";
 }
-
-__PACKAGE__->mk_accessors(qw/yaml_database/);
 
 
 =head1 DIAGNOSTICS
