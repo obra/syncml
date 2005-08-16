@@ -102,6 +102,8 @@ sub respond_to_command {
     my $self = shift;
     my $command = shift;
 
+    return if $command->command_name eq 'Status';
+
     # The following method call inserts the status object into the output
     # message. But note that if you later modify the status object, the
     # modification will in fact show up in the output message (as you'd
