@@ -127,8 +127,6 @@ Creates a new L<SyncML::Message::Command>; should only be called via a subclass.
 sub new {
     my $class = shift;
     my $self  = bless {}, $class;
-
-    $self->items(       [] );
     
     return $self;
 }
@@ -141,7 +139,9 @@ A key part of the design here is that C<as_xml> is only expected to be able
 to render the actual commands that we make as XML.  That is, any command that
 we build (at a high level) should be able to be represented as XML with C<as_xml>,
 but we should not strive for it to be able to generate arbitrary well-formed 
-SyncML.
+SyncML.  (That is, a L<SyncML::Message::Command> object is expected to be
+a high-level representation of the command that our code can deal with, not to be
+a container for arbitrary SyncML code.)
 
 =cut
 
@@ -169,97 +169,42 @@ sub _build_xml_body {
     # Do nothing. Subclasses do fun stuff here.
 } 
 
-=head2 new_from_xml $string
+=head2 from_xml $string
 
-Creates a new L<SyncML::Message> from the XML document C<$string>.
+Parses the XML document C<$string> into the object.  Should only be called
+once on any given object.
+
+A key part of the design here is that C<as_xml> is only expected to be able
+to render the actual commands that we make as XML.  That is, any command that
+we build (at a high level) should be able to be represented as XML with C<as_xml>,
+but we should not strive for it to be able to generate arbitrary well-formed 
+SyncML.
 
 =cut
 
-sub new_from_xml {
-    my $class = shift;
+sub from_xml {
+    my $self = shift;
     my $text  = shift;
+
+    if ($self->{'__parsed__'}++) {
+        die "from_xml called twice on the same object!";
+    } 
 
     my $twig = XML::Twig->new;
     $twig->parse($text);
 
-    return $class->new->_from_twig( $twig->root );
+    $self->_from_twig( $twig->root );
+    return;
 }
 
 sub _from_twig {
     my $self   = shift;
-    my $command = shift;
+    my $twig = shift;
 
-    $self->command_id( $command->first_child_text('CmdID') );
+    $self->command_id( $twig->trimmed_field('CmdID') );
+    $self->no_response( $twig->has_child('NoResp') ? 1 : 0 );
 
-    if ( $self->command_name eq 'Status' ) {
-        $self->message_reference( $command->first_child_text('MsgRef') );
-        $self->command_reference( $command->first_child_text('CmdRef') );
-        $self->command_name_reference( $command->first_child_text('Cmd') );
-        $self->target_reference( $command->first_child_text('TargetRef') );
-        $self->source_reference( $command->first_child_text('SourceRef') );
-        $self->status_code( $command->first_child_text('Data') );
-    } else {
-        $self->no_response( $command->has_child('NoResp') ? 1 : 0 );
-        $self->alert_code( $command->first_child_text('Data') )
-            if $self->command_name eq 'Alert';
-
-        if ( $self->command_name eq 'Map' or $self->command_name eq 'Sync' ) {
-            my $target = $command->first_child('Target');
-            $self->target_uri(
-                $target ? $target->first_child_text('LocURI') : '' );
-            my $source = $command->first_child('Source');
-            $self->source_uri(
-                $source ? $source->first_child_text('LocURI') : '' );
-        }
-
-        # Could possibly support more nested things
-        for my $kid ( $command->children(SyncML::Message::Command->supported_commands_regexp) )
-        {
-            my $class = SyncML::Message::Command->class_for_command($kid->tag);
-            my $command_obj = $class->new->_from_twig($kid);
-            push @{ $self->subcommands }, $command_obj;
-        }
-
-        for my $item (
-            $command->children(
-                $self->command_name eq 'Map' ? 'MapItem' : 'Item'
-            )
-            )
-        {
-            my $item_struct = {};
-            my $target      = $item->first_child('Target');
-            $item_struct->{'target_uri'} = $target->first_child_text('LocURI')
-                if $target;
-            my $source = $item->first_child('Source');
-            $item_struct->{'source_uri'} = $source->first_child_text('LocURI')
-                if $source;
-            $item_struct->{'data'} = $item->first_child_text('Data');
-
-            my $meta_hash = {};
-            my $meta      = $item->first_child('Meta');
-            if ($meta) {
-                for my $kid ( $meta->children ) {
-                    next
-                        if $kid->tag eq
-                        'Mem';    # don't feel like dealing with its nesting
-
-                    if ( $kid->tag eq 'Anchor' ) {
-                        $meta_hash->{'AnchorLast'}
-                            = $kid->first_child_text('Last');
-                        $meta_hash->{'AnchorNext'}
-                            = $kid->first_child_text('Next');
-                    } else {
-                        $meta_hash->{ $kid->tag } = $kid->text;
-                    }
-                }
-            }
-            $item_struct->{'meta'} = $meta_hash;
-
-            push @{ $self->items }, $item_struct;
-        }
-    }
-
-    return $self;
+    return;
 }
 
 
@@ -435,6 +380,18 @@ sub _build_xml_body {
     ) if defined $self->source_uri;
 }
 
+sub _from_twig {
+    my $self = shift;
+    my $twig = shift;
+    $self->SUPER::_from_twig($twig);
+
+    my $target = $twig->get_nested_child_text('Target', 'LocURI');
+    $self->target_uri($target) if defined $target;
+    my $source = $twig->get_nested_child_text('Source', 'LocURI');
+    $self->source_uri($source) if defined $source;
+
+} 
+
 package SyncML::Message::Command::Alert;
 use base qw/SyncML::Message::Command::Imperative/;
 __PACKAGE__->mk_accessors(qw/alert_code source_db_uri target_db_uri last_anchor next_anchor/);
@@ -467,6 +424,25 @@ sub _build_xml_body {
     } 
 } 
 
+sub _from_twig {
+    my $self = shift;
+    my $twig = shift;
+    $self->SUPER::_from_twig($twig);
+
+    $self->alert_code( $twig->trimmed_field('Data') );
+
+    if (my $item = $twig->first_child('Item')) {
+        my $target = $item->get_nested_child_text('Target', 'LocURI');
+        $self->target_db_uri($target) if defined $target;
+        my $source = $item->get_nested_child_text('Source', 'LocURI');
+        $self->source_db_uri($source) if defined $source;
+        my $last = $item->get_nested_child_text('Meta', 'Anchor', 'Last');
+        $self->last_anchor($last) if defined $last;
+        my $next = $item->get_nested_child_text('Meta', 'Anchor', 'Next');
+        $self->next_anchor($next) if defined $next;
+    } 
+} 
+
 
 package SyncML::Message::Command::Copy;
 use base qw/SyncML::Message::Command::Imperative/;
@@ -494,9 +470,27 @@ sub command_name { "Get" }
 
 package SyncML::Message::Command::Map;
 use base qw/SyncML::Message::Command::Imperative/;
+__PACKAGE__->mk_accessors(qw/mappings/);
 
 sub command_name { "Map" }
 
+# We don't implement _build_xml_body, because the server never sends
+# a Map to the client
+
+sub _from_twig {
+    my $self = shift;
+    my $twig = shift;
+    $self->SUPER::_from_twig($twig);
+
+    my @mappings;
+    for my $mapitem ($twig->children('MapItem')) {
+        push @mappings, {
+            client_id      => $mapitem->get_nested_child_text('Source', 'LocURI'),
+            application_id => $mapitem->get_nested_child_text('Target', 'LocURI'),
+        }; 
+    } 
+    $self->mappings(\@mappings);
+} 
 
 
 
@@ -536,6 +530,20 @@ sub _build_xml_body {
         $x->_x( $subcommand->as_xml );
     }
 } 
+
+sub _from_twig {
+    my $self = shift;
+    my $twig = shift;
+    $self->SUPER::_from_twig($twig);
+
+    for my $kid ( $twig->children(SyncML::Message::Command->supported_commands_regexp) )
+    {
+        my $class = SyncML::Message::Command->class_for_command($kid->tag);
+        my $command_obj = $class->new;
+        $command_obj->_from_twig($kid);
+        push @{ $self->subcommands }, $command_obj;
+    }
+}
 
 sub sent_all_status {
     my $self = shift;
@@ -593,13 +601,27 @@ sub _build_xml_body {
         if defined_and_length( $self->source_reference );
 }
 
+sub _from_twig {
+    my $self = shift;
+    my $twig = shift;
+    $self->SUPER::_from_twig($twig);
+
+    $self->message_reference     ( $twig->trimmed_field('MsgRef') );
+    $self->command_reference     ( $twig->trimmed_field('CmdRef') );
+    $self->command_name_reference( $twig->trimmed_field('Cmd') );
+    $self->target_reference      ( $twig->trimmed_field('TargetRef') );
+    $self->source_reference      ( $twig->trimmed_field('SourceRef') );
+
+    return;
+} 
+
 sub sent_all_status {
     # These commands don't require a status.
     return 1;
 } 
 
 package SyncML::Message::Command::Results;
-use base qw/SyncML::Message::Command::Reponse/;
+use base qw/SyncML::Message::Command::Response/;
 # Assumption: We don't ever care about client->server Results, and the only
 # Results we ever send to the client is device info.
 
@@ -685,5 +707,34 @@ sub _build_xml_body {
     }) if defined $self->next_anchor_acknowledgement;
 }
 
+sub _from_twig {
+    my $self = shift;
+    my $twig = shift;
+    $self->SUPER::_from_twig($twig);
+
+    $self->status_code( $twig->trimmed_field('Data') );
+
+    if (my $next = $twig->get_nested_child_text('Item', 'Data', 'Anchor', 'Next')) {
+        $self->next_anchor_acknowledgement($next);
+    } 
+} 
+
+
+package XML::Twig::Elt;
+
+# convenience routine: equivalent to nested ->first_child calls, but doesn't
+# bomb out when one returns undef
+sub get_nested_child_text {
+    my $self = shift;
+
+    my $current = $self;
+
+    while (@_) {
+        my $next_tag = shift;
+        $current = $current->first_child($next_tag);
+        return unless $current;
+    } 
+    return $current->trimmed_text;
+} 
 
 1;
