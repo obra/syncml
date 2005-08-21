@@ -179,6 +179,19 @@ sub handle_client_initialization {
         my $status = $self->add_status_for_command($get);
         $self->handle_get($get, $status);
     } 
+
+    unless ($self->in_message->final) {
+        # XXX TODO FIXME
+        warn "multi-message packages not yet supported!";
+    } 
+
+    $self->current_package(3);
+} 
+
+sub handle_client_modifications {
+    my $self = shift;
+
+    # We're in package #3 -- client modifications.
 } 
 
 sub handle_client_init_alert {
