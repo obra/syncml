@@ -245,12 +245,12 @@ sub handle_map {
 	my $client_id = $item->{source_uri};
 	my $application_id = $item->{target_uri};
 
-	unless (my $syncdb_entry = delete $self->waiting_for_map->{$application_id}) {
-	    warn "client wants to tell us its id ($client_id) for a new record with app id '$application_id', but we weren't expecting that!";
-	    next;
+	if (my $syncdb_entry = delete $self->waiting_for_map->{$application_id}) {
 	    $syncdb_entry->client_identifier($client_id);
 	    $self->synced_state->{$client_id} = $syncdb_entry;
-	} 
+	} else {
+	    warn "client wants to tell us its id ($client_id) for a new record with app id '$application_id', but we weren't expecting that!";
+	}
     } 
 
     for my $application_id (keys %{ $self->waiting_for_map }) {
@@ -274,9 +274,9 @@ sub handle_map {
 sub merge_back_to_server {
     my $self = shift;
 
-    warn "Original agreed state was: ", Dump $self->original_synced_state;
-    warn "Current agreed state is: ", Dump $self->synced_state;
-
+    warn "Original agreed state was: ". YAML::Dump $self->original_synced_state;
+    warn "Current agreed state is: ". YAML::Dump $self->synced_state;
+exit;
     # ...
 } 
 
@@ -462,8 +462,6 @@ sub handle_ps_sync {
 	
 	$self->synced_state->{$client_id} = $client_syncdb_entry;
     } 
-    
-    $self->write_current;
 } 
 
 sub get_application_database {
@@ -472,6 +470,7 @@ sub get_application_database {
 
     for my $app_id (keys %$db) {
 	my $ic = Data::ICal->new;
+	$ic->add_property(version => "1.0");
 	my $todo = Data::ICal::Entry::Todo->new;
 	$ic->add_entry($todo);
 	$todo->add_properties(
@@ -481,7 +480,7 @@ sub get_application_database {
 	my $syncitem = SyncML::SyncableItem->new;
 	$syncitem->application_identifier($app_id);
 	$syncitem->content($ic->as_string);
-	$syncitem->type("text/calendar");
+	$syncitem->type("text/x-vcalendar");
 	$syncitem->last_modified_as_seconds($db->{$app_id}{last_modified});
 
 	$db->{$app_id} = $syncitem;
@@ -600,6 +599,8 @@ sub get_unchanged_dead_future_changed {
     while (my ($application_id, $syncable_item) = each %$app_db) {
 	$self->future->{$application_id} = $syncable_item;
     } 
+
+    warn "sorted: " . YAML::Dump $self;
 } 
 
 __PACKAGE__->mk_accessors(qw/session_id internal_session_id last_message_id uri_base in_message out_message
