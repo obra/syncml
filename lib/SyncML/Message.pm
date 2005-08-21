@@ -111,11 +111,12 @@ sub new_from_xml {
     $self->commands( [] );
     for my $kid (
         $twig->root->first_child('SyncBody')->children(
-            qr/^(?:Alert|Copy|Exec|Get|Map|Put|Results|Search|Status|Sync|Add|Replace|Delete)$/
+            SyncML::Message::Command->supported_commands_regexp
         )
         )
     {
-        my $command_obj = SyncML::Message::Command->_new_from_twig($kid);
+        my $class = SyncML::Message::Command->class_for_command($kid->tag);
+        my $command_obj = $class->_new_from_twig($kid);
         push @{ $self->commands }, $command_obj;
     }
 

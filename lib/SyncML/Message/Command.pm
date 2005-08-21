@@ -10,7 +10,7 @@ use XML::Twig;
 
 =head1 NAME
 
-SyncML::Message::Command - Represents a single (possibly compound) SyncML command
+SyncML::Message::Command - Abstract base class for a single (possibly compound) SyncML command
 
 
 =head1 SYNOPSIS
@@ -34,9 +34,10 @@ SyncML::Message::Command - Represents a single (possibly compound) SyncML comman
 
 =cut
 
-=head2 command_name [$command_name]
+=head2 command_name
 
-(Required.) Gets or sets the SyncML command name, such as C<Add>, C<Status>, or C<Sync>.
+Gets the SyncML command name, such as C<Add>, C<Status>, or C<Sync>.  (Implemented 
+in the subclass.)
 
 =head2 command_id [$command_id]
 
@@ -110,7 +111,7 @@ XXX TODO FIXME
 =cut
 
 __PACKAGE__->mk_accessors(
-    qw/command_name command_id no_response items subcommands
+    qw/command_id no_response items subcommands
         target_uri source_uri
         message_reference command_reference
         command_name_reference target_reference source_reference status_code alert_code
@@ -138,9 +139,9 @@ sub sent_all_status {
 
 sub defined_and_length { defined $_[0] and length $_[0] }
 
-=head2 new [$command_name]
+=head2 new
 
-Creates a new L<SyncML::Message::Command>, with command name C<$command_name> if it's given.
+Creates a new L<SyncML::Message::Command>; should only be called via a subclass.
 
 =cut
 
@@ -148,11 +149,8 @@ sub new {
     my $class = shift;
     my $self  = bless {}, $class;
 
-    $self->command_name(shift) if @_;
-
     $self->items(       [] );
     $self->subcommands( [] );
-    $self->no_response(0);
 
     return $self;
 }
@@ -351,12 +349,8 @@ sub _new_from_twig {
     my $class   = shift;
     my $command = shift;
 
-    my $self = bless {}, $class;
+    my $self = $class->new;
 
-    $self->items(       [] );
-    $self->subcommands( [] );
-
-    $self->command_name( $command->tag );
     $self->command_id( $command->first_child_text('CmdID') );
 
     if ( $self->command_name eq 'Status' ) {
@@ -381,9 +375,10 @@ sub _new_from_twig {
         }
 
         # Could possibly support more nested things
-        for my $kid ( $command->children(qr/^(?:Add|Copy|Delete|Replace)$/) )
+        for my $kid ( $command->children(SyncML::Message::Command->supported_commands_regexp) )
         {
-            my $command_obj = SyncML::Message::Command->_new_from_twig($kid);
+            my $class = SyncML::Message::Command->class_for_command($kid->tag);
+            my $command_obj = $class->_new_from_twig($kid);
             push @{ $self->subcommands }, $command_obj;
         }
 
@@ -476,6 +471,43 @@ sub _devinfo {
 
     return $x->_output;
 }
+
+my @_SUPPORTED_COMMANDS = qw(    
+        Alert  Copy  Exec  Get  Map  Put  Results  Search  Status  Sync  Add  Replace  Delete
+);
+
+sub supported_commands { @_SUPPORTED_COMMANDS }
+
+my $_SUPPORTED_COMMANDS_REGEXP;
+{
+    my $alternatives = join '|', @_SUPPORTED_COMMANDS;
+    $_SUPPORTED_COMMANDS_REGEXP = qr/^(?:$alternatives)$/;
+}
+
+sub supported_commands_regexp { $_SUPPORTED_COMMANDS_REGEXP }
+
+my %_SUPPORTED_COMMANDS_CLASSES = map { lc($_) => 'SyncML::Message::Command::' . ucfirst(lc($_)) } 
+                                      @_SUPPORTED_COMMANDS;
+
+=head2 class_for_command $command_name
+
+Returns the name of the L<SyncML::Message::Command> subclass for commands
+named C<$command_name>.  (The case of C<$command_name> is irrelevant.)
+
+Example:
+
+    my $class = SyncML::Message::Command->class_for_command('Alert');
+    my $alert = $class->new;
+
+=cut
+
+sub class_for_command {
+    my $class = shift;
+    my $command_name = shift;
+
+    return $_SUPPORTED_COMMANDS_CLASSES{lc($command_name)}; # this is undef if it's unknown
+} 
+
 
 =head1 DIAGNOSTICS
 
@@ -590,5 +622,106 @@ SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF
 SUCH DAMAGES.
 
 =cut
+
+package SyncML::Message::Command::Alert;
+use base qw/SyncML::Message::Command/;
+
+sub command_name { "Alert" }
+
+
+
+
+package SyncML::Message::Command::Copy;
+use base qw/SyncML::Message::Command/;
+
+sub command_name { "Copy" }
+
+
+
+
+package SyncML::Message::Command::Exec;
+use base qw/SyncML::Message::Command/;
+
+sub command_name { "Exec" }
+
+
+
+
+package SyncML::Message::Command::Get;
+use base qw/SyncML::Message::Command/;
+
+sub command_name { "Get" }
+
+
+
+
+package SyncML::Message::Command::Map;
+use base qw/SyncML::Message::Command/;
+
+sub command_name { "Map" }
+
+
+
+
+package SyncML::Message::Command::Put;
+use base qw/SyncML::Message::Command/;
+
+sub command_name { "Put" }
+
+
+
+
+package SyncML::Message::Command::Results;
+use base qw/SyncML::Message::Command/;
+
+sub command_name { "Results" }
+
+
+
+
+package SyncML::Message::Command::Search;
+use base qw/SyncML::Message::Command/;
+
+sub command_name { "Search" }
+
+
+
+
+package SyncML::Message::Command::Status;
+use base qw/SyncML::Message::Command/;
+
+sub command_name { "Status" }
+
+
+
+
+package SyncML::Message::Command::Sync;
+use base qw/SyncML::Message::Command/;
+
+sub command_name { "Sync" }
+
+
+
+
+package SyncML::Message::Command::Add;
+use base qw/SyncML::Message::Command/;
+
+sub command_name { "Add" }
+
+
+
+
+package SyncML::Message::Command::Replace;
+use base qw/SyncML::Message::Command/;
+
+sub command_name { "Replace" }
+
+
+
+
+package SyncML::Message::Command::Delete;
+use base qw/SyncML::Message::Command/;
+
+sub command_name { "Delete" }
 
 1;

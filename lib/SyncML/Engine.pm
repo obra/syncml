@@ -105,8 +105,7 @@ sub add_status_for_header {
     my $self        = shift;
     my $status_code = shift;
 
-    my $status = SyncML::Message::Command->new;
-    $status->command_name('Status');
+    my $status = SyncML::Message::Command::Status->new;
     $self->out_message->stamp_command_id($status);
 
     $status->message_reference( $self->in_message->message_id );
@@ -128,8 +127,7 @@ sub add_status_for_command {
     my $self    = shift;
     my $command = shift;
 
-    my $status = SyncML::Message::Command->new;
-    $status->command_name('Status');
+    my $status = SyncML::Message::Command::Status->new;
     $self->out_message->stamp_command_id($status);
 
     $status->message_reference( $self->in_message->message_id );
@@ -214,7 +212,7 @@ sub handle_client_init_alert {
     push @{ $status->items },
         { meta => { AnchorNext => $item->{'meta'}->{'AnchorNext'} } };
 
-    my $response_alert = SyncML::Message::Command->new('Alert');
+    my $response_alert = SyncML::Message::Command::Alert->new;
     $self->out_message->stamp_command_id($response_alert);
     push @{ $self->out_message->commands }, $response_alert;
     $response_alert->alert_code('201');    # slow sync
@@ -236,7 +234,7 @@ sub handle_get {
     if (@{ $command->items } == 1 and $command->items->[0]->{'target_uri'} eq './devinf11') {
         $status->status_code(200);
 
-        my $results = SyncML::Message::Command->new('Results');
+        my $results = SyncML::Message::Command::Results->new;
         $self->out_message->stamp_command_id($results);
 
         $results->message_reference( $self->in_message->message_id );
@@ -321,7 +319,7 @@ sub handle_sync {
 
     $status->status_code(200);
 
-    my $response_sync = SyncML::Message::Command->new('Sync');
+    my $response_sync = SyncML::Message::Command::Sync->new;
     $self->out_message->stamp_command_id($response_sync);
     push @{ $self->out_message->commands }, $response_sync;
     $response_sync->target_uri( $command->source_uri );
@@ -413,7 +411,7 @@ sub handle_ps_sync {
        # Whether or not they've deleted it, the server now wins.  In lieu of a
        # real field-by-field merge support, just send out a Replace from us.
 
-        my $replace = SyncML::Message::Command->new('Replace');
+        my $replace = SyncML::Message::Command::Replace->new;
         $self->out_message->stamp_command_id($replace);
 
         push @{ $replace->items },
@@ -437,7 +435,7 @@ sub handle_ps_sync {
         $syncdb_entry->content( $syncable_item->content );
         $syncdb_entry->type( $syncable_item->type );
 
-        my $add = SyncML::Message::Command->new('Add');
+        my $add = SyncML::Message::Command::Add->new;
         $self->out_message->stamp_command_id($add);
 
         push @{ $add->items },
@@ -467,7 +465,7 @@ sub handle_ps_sync {
 
               # The client hasn't changed it, but we've deleted it.  Send them
               # a delete command.
-                my $delete = SyncML::Message::Command->new('Delete');
+                my $delete = SyncML::Message::Command::Delete->new;
                 $self->out_message->stamp_command_id($delete);
 
                 push @{ $delete->items }, { target_uri => $client_id, };
