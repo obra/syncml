@@ -116,7 +116,7 @@ sub new_from_xml {
         )
     {
         my $class = SyncML::Message::Command->class_for_command($kid->tag);
-        my $command_obj = $class->_new_from_twig($kid);
+        my $command_obj = $class->new->_from_twig($kid);
         push @{ $self->commands }, $command_obj;
     }
 

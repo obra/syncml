@@ -52,12 +52,6 @@ a C<Status> for this command.
 
 XXX TODO FIXME
 
-=head2 items
-
-Returns an array reference to the items contained in this command.  (In the case of the C<Map> command,
-these are actually C<MapItem>s, not C<Item>s.)  For now these are just hashes of target_uri, source_uri,
-data.
-
 =head2 subcommands
 
 Returns an array reference to the subcommands of this command, for commands like C<Sync> or C<Atomic>.
@@ -111,12 +105,7 @@ XXX TODO FIXME
 =cut
 
 __PACKAGE__->mk_accessors(
-    qw/command_id no_response items subcommands
-        target_uri source_uri
-        message_reference command_reference
-        command_name_reference target_reference source_reference status_code alert_code
-        meta_hash
-        include_device_info response_status/
+    qw/command_id no_response target_uri source_uri response_status/
 );
 
 sub sent_all_status {
@@ -137,8 +126,6 @@ sub sent_all_status {
     return 1;
 }
 
-sub defined_and_length { defined $_[0] and length $_[0] }
-
 =head2 new
 
 Creates a new L<SyncML::Message::Command>; should only be called via a subclass.
@@ -150,14 +137,19 @@ sub new {
     my $self  = bless {}, $class;
 
     $self->items(       [] );
-    $self->subcommands( [] );
-
+    
     return $self;
 }
 
 =head2 as_xml
 
 Returns the command as an XML string.
+
+A key part of the design here is that C<as_xml> is only expected to be able
+to render the actual commands that we make as XML.  That is, any command that
+we build (at a high level) should be able to be represented as XML with C<as_xml>,
+but we should not strive for it to be able to generate arbitrary well-formed 
+SyncML.
 
 =cut
 
@@ -170,164 +162,20 @@ sub as_xml {
         $self->command_name,
         sub {
             $x->CmdID( $self->command_id );
+            $x->NoResp if $self->no_response;
 
-            if ( $self->meta_hash and %{ $self->meta_hash } ) {
-                my %mh = %{ $self->meta_hash };
-                $x->Meta(
-                    sub {
-                        if (   defined $mh{'AnchorNext'}
-                            or defined $mh{'AnchorLast'} )
-                        {
-                            $x->Anchor(
-                                xmlns => 'syncml:metinf',
-                                sub {
-                                    $x->Next( $mh{'AnchorNext'} )
-                                        if defined $mh{'AnchorNext'};
-                                    $x->Last( $mh{'AnchorLast'} )
-                                        if defined $mh{'AnchorLast'};
-                                }
-                            );
-                        }
-                        while ( my ( $k, $v ) = each %mh ) {
-                            next if $k =~ /^Anchor/;
-
-                   # Yes, this is 'xmlns', not 'xml:ns'.  SyncML is weird like
-                   # that.
-                            $x->_elt( $k, xmlns => 'syncml:metinf', $v );
-                        }
-                    }
-                );
-            }
-
-            if (   $self->command_name eq 'Status'
-                or $self->command_name eq 'Results' )
-            {
-                $x->MsgRef( $self->message_reference );
-                $x->CmdRef( $self->command_reference );
-                $x->Cmd( $self->command_name_reference )
-                    if $self->command_name eq 'Status';
-                $x->TargetRef( $self->target_reference )
-                    if defined_and_length( $self->target_reference );
-                $x->SourceRef( $self->source_reference )
-                    if defined_and_length( $self->source_reference );
-
-                if ( $self->command_name eq 'Status' ) {
-                    $x->Data( $self->status_code );
-                } else {    # Results
-                    $x->Item(
-                        sub {
-                            $x->Source(
-                                sub {
-                                    $x->LocURI( $self->source_uri );
-                                }
-                                )
-                                if defined_and_length $self->source_uri;
-                            $x->Data(
-                                sub {
-                                    $x->_x( $self->_devinfo );
-                                }
-                                )
-                                if $self->include_device_info;
-                        }
-                    );
-                }
-            } else {    # not Status or Results: a real command
-                $x->NoResp if $self->no_response;
-                $x->Data( $self->alert_code )
-                    if $self->command_name eq 'Alert';
-                if (   $self->command_name eq 'Map'
-                    or $self->command_name eq 'Sync' )
-                {
-                    $x->Target(
-                        sub {
-                            $x->LocURI( $self->target_uri );
-                        }
-                    );
-                    $x->Source(
-                        sub {
-                            $x->LocURI( $self->source_uri );
-                        }
-                    );
-                }
-            }
-
-            for my $subcommand ( @{ $self->subcommands } ) {
-                $x->_x( $subcommand->as_xml );
-            }
-
-            my $is_map = $self->command_name eq 'Map';
-
-            # Handle Items / MapItems
-            for my $item ( @{ $self->items } ) {
-                my $tagname = $is_map ? 'MapItem' : 'Item';
-                $x->$tagname(
-                    sub {
-                        $x->Target(
-                            sub {
-                                $x->LocURI( $item->{'target_uri'} );
-                            }
-                            )
-                            if defined $item->{'target_uri'};
-                        $x->Source(
-                            sub {
-                                $x->LocURI( $item->{'source_uri'} );
-                            }
-                            )
-                            if defined $item->{'source_uri'};
-
-                        unless ($is_map) {
-                            $x->Data( $item->{'data'} )
-                                if defined $item->{'data'};
-
-                            if ( $item->{'meta'} and %{ $item->{'meta'} } ) {
-                                my %mh = %{ $item->{'meta'} };
-
-                             # bad hack: status probably gets to have Meta too
-                                my $tagname = $self->command_name eq 'Status'
-                                    ? 'Data'
-                                    : 'Meta';
-                                $x->$tagname(
-                                    sub {
-                                        if (   defined $mh{'AnchorNext'}
-                                            or defined $mh{'AnchorLast'} )
-                                        {
-                                            $x->Anchor(
-                                                xmlns => 'syncml:metinf',
-                                                sub {
-                                                    $x->Next(
-                                                        $mh{'AnchorNext'} )
-                                                        if defined $mh{
-                                                        'AnchorNext'};
-                                                    $x->Last(
-                                                        $mh{'AnchorLast'} )
-                                                        if defined $mh{
-                                                        'AnchorLast'};
-                                                }
-                                            );
-                                        }
-                                        while ( my ( $k, $v ) = each %mh ) {
-                                            next if $k =~ /^Anchor/;
-
-                   # Yes, this is 'xmlns', not 'xml:ns'.  SyncML is weird like
-                   # that.
-                                            $x->_elt(
-                                                $k,
-                                                xmlns => 'syncml:metinf',
-                                                $v
-                                            );
-                                        }
-                                    }
-                                );
-                            }
-                        }
-                    }
-                );
-            }
+            $self->_build_xml_body($x);
         }
     );
 
     return $x->_output;
 }
+
+sub _build_xml_body {
+    my $self = shift;
+    my $builder = shift;
+    # Do nothing. Subclasses do fun stuff here.
+} 
 
 =head2 new_from_xml $string
 
@@ -342,14 +190,12 @@ sub new_from_xml {
     my $twig = XML::Twig->new;
     $twig->parse($text);
 
-    return $class->_new_from_twig( $twig->root );
+    return $class->new->_from_twig( $twig->root );
 }
 
-sub _new_from_twig {
-    my $class   = shift;
+sub _from_twig {
+    my $self   = shift;
     my $command = shift;
-
-    my $self = $class->new;
 
     $self->command_id( $command->first_child_text('CmdID') );
 
@@ -378,7 +224,7 @@ sub _new_from_twig {
         for my $kid ( $command->children(SyncML::Message::Command->supported_commands_regexp) )
         {
             my $class = SyncML::Message::Command->class_for_command($kid->tag);
-            my $command_obj = $class->_new_from_twig($kid);
+            my $command_obj = $class->new->_from_twig($kid);
             push @{ $self->subcommands }, $command_obj;
         }
 
@@ -424,53 +270,6 @@ sub _new_from_twig {
     return $self;
 }
 
-sub _devinfo {
-    my $self = shift;
-
-    my $x = XML::Builder->new;
-
-    $x->DevInf(
-        xmlns => "syncml:devinf",
-        sub {
-            $x->VerDTD("1.1");
-            $x->Man('bps');
-            $x->Mod('SyncML::Engine');
-            $x->SwV('0.1');
-            $x->HwV('perl');
-            $x->DevID('xyzzy');
-            $x->DevTyp('server');
-
-            $x->DataStore(
-                sub {
-                    $x->SourceRef('./tasks');
-                    $x->DisplayName('Tasks');
-                    $x->_elt(
-                        'Rx-Pref',
-                        sub {
-                            $x->CTType('text/calendar');
-                            $x->VerCT('2.0');
-                        }
-                    );
-                    $x->_elt(
-                        'Tx-Pref',
-                        sub {
-                            $x->CTType('text/calendar');
-                            $x->VerCT('2.0');
-                        }
-                    );
-                    $x->SyncCap(
-                        sub {
-                            $x->SyncType('1');
-                            $x->SyncType('2');
-                        }
-                    );
-                }
-            );
-        }
-    );
-
-    return $x->_output;
-}
 
 my @_SUPPORTED_COMMANDS = qw(    
         Alert  Copy  Exec  Get  Map  Put  Results  Search  Status  Sync  Add  Replace  Delete
@@ -623,16 +422,62 @@ SUCH DAMAGES.
 
 =cut
 
-package SyncML::Message::Command::Alert;
+package SyncML::Message::Command::Imperative;
+# base class for all commands except Status and Results
 use base qw/SyncML::Message::Command/;
+
+sub _build_xml_body {
+    my $self = shift;
+    my $x = shift;
+    
+    $x->Target(
+        sub {
+            $x->LocURI( $self->target_uri );
+        }
+    ) if defined $self->target_uri;
+
+    $x->Source(
+        sub {
+            $x->LocURI( $self->source_uri );
+        }
+    ) if defined $self->source_uri;
+}
+
+package SyncML::Message::Command::Alert;
+use base qw/SyncML::Message::Command::Imperative/;
+__PACKAGE__->mk_accessors(qw/alert_code source_db_uri target_db_uri last_anchor next_anchor/);
+# If we support Alerts with multiple databases, this will need to change.
 
 sub command_name { "Alert" }
 
+sub _build_xml_body {
+    my $self = shift;
+    my $x = shift;
+    $self->SUPER::_build_xml_body($x);
 
+    $x->Data( $self->alert_code );
+
+    if (defined $self->source_db_uri) {
+        $x->Item(sub{
+            $x->Target(sub{
+                $x->LocURI($self->target_db_uri);
+            });
+            $x->Source(sub{
+                $x->LocURI($self->source_db_uri);
+            });
+            $x->Meta(sub{
+                $x->Anchor(xmlns => 'syncml:metinf', sub{
+                    $x->Last($self->last_anchor);
+                    $x->Next($self->next_anchor);
+                });
+            });
+        });
+    } 
+} 
 
 
 package SyncML::Message::Command::Copy;
-use base qw/SyncML::Message::Command/;
+use base qw/SyncML::Message::Command::Imperative/;
 
 sub command_name { "Copy" }
 
@@ -640,7 +485,7 @@ sub command_name { "Copy" }
 
 
 package SyncML::Message::Command::Exec;
-use base qw/SyncML::Message::Command/;
+use base qw/SyncML::Message::Command::Imperative/;
 
 sub command_name { "Exec" }
 
@@ -648,7 +493,7 @@ sub command_name { "Exec" }
 
 
 package SyncML::Message::Command::Get;
-use base qw/SyncML::Message::Command/;
+use base qw/SyncML::Message::Command::Imperative/;
 
 sub command_name { "Get" }
 
@@ -656,7 +501,7 @@ sub command_name { "Get" }
 
 
 package SyncML::Message::Command::Map;
-use base qw/SyncML::Message::Command/;
+use base qw/SyncML::Message::Command::Imperative/;
 
 sub command_name { "Map" }
 
@@ -664,47 +509,46 @@ sub command_name { "Map" }
 
 
 package SyncML::Message::Command::Put;
-use base qw/SyncML::Message::Command/;
-
+use base qw/SyncML::Message::Command::Imperative/;
 sub command_name { "Put" }
 
 
-
-
-package SyncML::Message::Command::Results;
-use base qw/SyncML::Message::Command/;
-
-sub command_name { "Results" }
-
-
-
-
 package SyncML::Message::Command::Search;
-use base qw/SyncML::Message::Command/;
+use base qw/SyncML::Message::Command::Imperative/;
 
 sub command_name { "Search" }
 
 
 
 
-package SyncML::Message::Command::Status;
-use base qw/SyncML::Message::Command/;
-
-sub command_name { "Status" }
-
-
-
-
 package SyncML::Message::Command::Sync;
-use base qw/SyncML::Message::Command/;
+use base qw/SyncML::Message::Command::Imperative/;
+__PACKAGE__->mk_accessors(qw/subcommands/);
+
+sub new {
+    my $class = shift;
+    my $self = $class->SUPER::new(@_);
+
+    $self->subcommands([]);
+    return $self;
+} 
 
 sub command_name { "Sync" }
 
+sub _build_xml_body {
+    my $self = shift;
+    my $x = shift;
+    $self->SUPER::_build_xml_body($x);
+
+    for my $subcommand ( @{ $self->subcommands } ) {
+        $x->_x( $subcommand->as_xml );
+    }
+} 
 
 
 
 package SyncML::Message::Command::Add;
-use base qw/SyncML::Message::Command/;
+use base qw/SyncML::Message::Command::Imperative/;
 
 sub command_name { "Add" }
 
@@ -712,7 +556,7 @@ sub command_name { "Add" }
 
 
 package SyncML::Message::Command::Replace;
-use base qw/SyncML::Message::Command/;
+use base qw/SyncML::Message::Command::Imperative/;
 
 sub command_name { "Replace" }
 
@@ -720,8 +564,120 @@ sub command_name { "Replace" }
 
 
 package SyncML::Message::Command::Delete;
-use base qw/SyncML::Message::Command/;
+use base qw/SyncML::Message::Command::Imperative/;
 
 sub command_name { "Delete" }
+
+
+
+package SyncML::Message::Command::Response;
+# base class for Status and Results
+use base qw/SyncML::Message::Command/;
+__PACKAGE__->mk_accessors(qw/message_reference 
+                             command_reference 
+                        command_name_reference 
+                              target_reference 
+                              source_reference 
+                        /);
+sub _build_xml_body {
+    my $self = shift;
+    my $x = shift;
+
+    $x->MsgRef( $self->message_reference );
+    $x->CmdRef( $self->command_reference );
+    $x->Cmd( $self->command_name_reference );
+    $x->TargetRef( $self->target_reference )
+        if defined( $self->target_reference );
+    $x->SourceRef( $self->source_reference )
+        if defined_and_length( $self->source_reference );
+} 
+
+package SyncML::Message::Command::Results;
+use base qw/SyncML::Message::Command::Reponse/;
+# Assumption: We don't ever care about client->server Results, and the only
+# Results we ever send to the client is device info.
+
+sub command_name { "Results" }
+
+sub _build_xml_body {
+    my $self = shift;
+    my $x = shift;
+    $self->SUPER::_build_xml_body($x);
+    
+    $x->Meta(sub{
+        $x->Type(xmlns => 'syncml:metinf', 'application/vnd.syncml-devinf+xml');
+    });
+
+    $x->Item(sub {
+        $x->Source(sub {
+            $x->LocURI('./devinf11');
+        });
+        $x->Data(sub {
+            $x->DevInf(xmlns => 'syncml:devinf', sub {
+                $x->VerDTD("1.1");
+                $x->Man('bps');
+                $x->Mod('SyncML::Engine');
+                $x->SwV('0.1');
+                $x->HwV('perl');
+                $x->DevID('xyzzy');
+                $x->DevTyp('server');
+
+                $x->DataStore(
+                    sub {
+                        $x->SourceRef('./tasks');
+                        $x->DisplayName('Tasks');
+                        $x->_elt(
+                            'Rx-Pref',
+                            sub {
+                                $x->CTType('text/calendar');
+                                $x->VerCT('2.0');
+                            }
+                        );
+                        $x->_elt(
+                            'Tx-Pref',
+                            sub {
+                                $x->CTType('text/calendar');
+                                $x->VerCT('2.0');
+                            }
+                        );
+                        $x->SyncCap(
+                            sub {
+                                $x->SyncType('1');
+                                $x->SyncType('2');
+                            }
+                        );
+                    }
+                );
+            });
+        });
+    });
+} 
+
+
+package SyncML::Message::Command::Status;
+use base qw/SyncML::Message::Command::Response/;
+
+__PACKAGE__->mk_accessors(qw/status_code next_anchor_acknowledgement/);
+# next_anchor_acknowledgement is, in the case of a Status responding to an
+# Alert, just a duplicate of the Next that the other side sent
+
+sub command_name { "Status" }
+
+sub _build_xml_body {
+    my $self = shift;
+    my $x = shift;
+    $self->SUPER::_build_xml_body($x);
+
+    $x->Data( $self->status_code );
+
+    $x->Item(sub{
+        $x->Data(sub{
+            $x->Anchor( xmlns => 'syncml:metinf', sub{
+                $x->Next($self->next_anchor_acknowledgement);
+            });
+        });
+    }) if defined $self->next_anchor_acknowledgement;
+}
+
 
 1;
