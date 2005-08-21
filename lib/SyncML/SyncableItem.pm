@@ -9,7 +9,6 @@ use Carp;
 use DateTime;
 use Data::ICal;
 
-
 =head1 NAME
 
 SyncML::SyncableItem - The application's representation of a syncable item
@@ -38,10 +37,10 @@ Creates a new L<SyncML::SyncableItem>.
 
 sub new {
     my $class = shift;
-    my $self = bless {}, $class;
+    my $self  = bless {}, $class;
 
     return $self;
-} 
+}
 
 =head2 content [$content]
 
@@ -68,7 +67,8 @@ be calculated on the server; it should not be taken from anything the client sen
 
 =cut
 
-__PACKAGE__->mk_accessors(qw/content type application_identifier last_modified/);
+__PACKAGE__->mk_accessors(
+    qw/content type application_identifier last_modified/);
 
 =head2 last_modified_as_seconds [$last_modified_as_seconds]
 
@@ -81,7 +81,7 @@ sub last_modified_as_seconds {
     $self->last_modified( DateTime->from_epoch( epoch => shift ) ) if @_;
     my $last_modified = $self->last_modified;
     return $last_modified ? $last_modified->epoch : undef;
-} 
+}
 
 =head2 content_as_object
 
@@ -90,7 +90,7 @@ See L<SyncML::ContentAsObject> for more information.
 
 =cut
 
-__PACKAGE__->mk_object_accessor(content_as_object => qw/content type/); 
+__PACKAGE__->mk_object_accessor( content_as_object => qw/content type/ );
 
 =head1 DIAGNOSTICS
 

@@ -3,7 +3,8 @@ package SyncML::SimpleServer;
 use warnings;
 use strict;
 
-use base qw/HTTP::Server::Simple::Recorder HTTP::Server::Simple::CGI Class::Accessor/;
+use base
+    qw/HTTP::Server::Simple::Recorder HTTP::Server::Simple::CGI Class::Accessor/;
 
 use Carp;
 
@@ -40,7 +41,7 @@ Handles a single request.
 
 sub handle_request {
     my $self = shift;
-    my $cgi = shift;
+    my $cgi  = shift;
 
     my $resp = HTTP::Response->new(200);
     $resp->protocol("HTTP/1.1");
@@ -49,40 +50,41 @@ sub handle_request {
 
     my $input = $cgi->param('POSTDATA');
     if ($using_wbxml) {
-	$input = XML::WBXML::wbxml_to_xml($input);
+        $input = XML::WBXML::wbxml_to_xml($input);
     }
 
     my $in_message = SyncML::Message->new_from_xml($input);
 
-    return unless $in_message; # should do some sort of output I guess
+    return unless $in_message;    # should do some sort of output I guess
 
     my $engine;
-    
-    # Yeah, yeah, parsing our own query strings is usually the sign of an awful
-    # CGI, except that CGI.pm is mean and won't parse the query string if
-    # there's posted data.
-    if ($ENV{'QUERY_STRING'} =~ /^sid=([0-9a-f]+)/) {
-	$engine = $self->engines->{ $1 };
-    } 
+
+   # Yeah, yeah, parsing our own query strings is usually the sign of an awful
+   # CGI, except that CGI.pm is mean and won't parse the query string if
+   # there's posted data.
+    if ( $ENV{'QUERY_STRING'} =~ /^sid=([0-9a-f]+)/ ) {
+        $engine = $self->engines->{$1};
+    }
 
     unless ($engine) {
-	$engine = SyncML::Engine->new;
-	$engine->uri_base("http://" . hostip . ":8080/");
-	$self->engines->{ $engine->internal_session_id } = $engine;
-    } 
+        $engine = SyncML::Engine->new;
+        $engine->uri_base( "http://" . hostip . ":8080/" );
+        $self->engines->{ $engine->internal_session_id } = $engine;
+    }
 
-    my $out_message = $engine->respond_to_message( $in_message );
+    my $out_message = $engine->respond_to_message($in_message);
 
     delete $self->engines->{ $engine->internal_session_id } if $engine->done;
 
     my $output = $out_message->as_xml;
-    if ($using_wbxml) { # warn $output;
-	$output = XML::WBXML::xml_to_wbxml($output);
-    } 
-    
+    if ($using_wbxml) {    # warn $output;
+        $output = XML::WBXML::xml_to_wbxml($output);
+    }
+
     $resp->content($output);
-    $resp->content_length(length $resp->content);
-    $resp->content_type('application/vnd.syncml+' . ($using_wbxml ? 'wb' : '') . 'xml');
+    $resp->content_length( length $resp->content );
+    $resp->content_type(
+        'application/vnd.syncml+' . ( $using_wbxml ? 'wb' : '' ) . 'xml' );
 
     print $resp->as_string;
 }
@@ -97,13 +99,14 @@ C<internal_session_id> as the key.
 sub engines {
     my $self = shift;
     return $self->{'_syncml_engines'} ||= {};
-} 
+}
 
 sub print_banner {
     my $self = shift;
-    print "SyncML::SimpleServer: You can connect to your server at http://" . hostip . ":8080/\n";
+    print "SyncML::SimpleServer: You can connect to your server at http://"
+        . hostip
+        . ":8080/\n";
 }
-
 
 =head1 DIAGNOSTICS
 

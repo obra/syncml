@@ -7,36 +7,41 @@ use base qw/t::SyncML/;
 
 use Sys::HostIP;
 
-sub start_server : Test(startup => 6) {
+sub start_server : Test( startup => 6 ) {
     my $self = shift;
     use_ok 'Test::HTTP::Server::Simple';
     use_ok 'SyncML::SimpleServer';
     use_ok 'HTTP::Server::Simple::Recorder';
 
-    @Test::SyncML::SimpleServer::ISA = qw/Test::HTTP::Server::Simple SyncML::SimpleServer/;
-    
+    @Test::SyncML::SimpleServer::ISA
+        = qw/Test::HTTP::Server::Simple SyncML::SimpleServer/;
+
     unshift @Test::SyncML::SimpleServer::ISA, 'HTTP::Server::Simple::Recorder'
-	if $ENV{TEST_RECORD};
+        if $ENV{TEST_RECORD};
 
     $self->{server} = Test::SyncML::SimpleServer->new;
-    isa_ok($self->{server}, 'SyncML::SimpleServer');
-    isa_ok($self->{server}, 'Test::HTTP::Server::Simple');
+    isa_ok( $self->{server}, 'SyncML::SimpleServer' );
+    isa_ok( $self->{server}, 'Test::HTTP::Server::Simple' );
 
     $self->{URL} = $self->{server}->started_ok;
     my $ip = hostip;
     $self->{URL} =~ s{/localhost\b}{/$ip};
 
-} 
+}
 
 sub post_ok {
-    my $self = shift;
+    my $self    = shift;
     my $message = shift;
 
     my $mech = Test::WWW::Mechanize->new;
 
-    $mech->post($self->{URL}, Content => $message->as_xml, 'Content-Type' => "application/vnd.syncml+xml");
-    ok($mech->success, "request successful");
-    return SyncML::Message->new_from_xml($mech->content);
-} 
+    $mech->post(
+        $self->{URL},
+        Content        => $message->as_xml,
+        'Content-Type' => "application/vnd.syncml+xml"
+    );
+    ok( $mech->success, "request successful" );
+    return SyncML::Message->new_from_xml( $mech->content );
+}
 
 1;

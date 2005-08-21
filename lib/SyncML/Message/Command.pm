@@ -8,7 +8,6 @@ use base qw/Class::Accessor/;
 use Carp;
 use XML::Twig;
 
-
 =head1 NAME
 
 SyncML::Message::Command - Represents a single (possibly compound) SyncML command
@@ -110,28 +109,32 @@ XXX TODO FIXME
 
 =cut
 
-__PACKAGE__->mk_accessors(qw/command_name command_id no_response items subcommands
-                             target_uri source_uri
-			     message_reference command_reference 
-			     command_name_reference target_reference source_reference status_code alert_code
-			     meta_hash
-			     include_device_info sent_status_for/);
+__PACKAGE__->mk_accessors(
+    qw/command_name command_id no_response items subcommands
+        target_uri source_uri
+        message_reference command_reference
+        command_name_reference target_reference source_reference status_code alert_code
+        meta_hash
+        include_device_info sent_status_for/
+);
 
 sub sent_all_status {
     my $self = shift;
-    
+
     # Some commands don't need a status.
-    return 1 if $self->command_name eq 'Status' or $self->command_name eq 'Results';
+    return 1
+        if $self->command_name eq 'Status'
+        or $self->command_name eq 'Results';
     return 1 if $self->no_response;
 
     return unless $self->sent_status_for;
 
-    for my $subcommand (@{ $self->subcommands }) {
-	return unless $subcommand->sent_all_status;
-    } 
+    for my $subcommand ( @{ $self->subcommands } ) {
+        return unless $subcommand->sent_all_status;
+    }
 
     return 1;
-} 
+}
 
 sub defined_and_length { defined $_[0] and length $_[0] }
 
@@ -143,16 +146,16 @@ Creates a new L<SyncML::Message::Command>, with command name C<$command_name> if
 
 sub new {
     my $class = shift;
-    my $self = bless {}, $class;
+    my $self  = bless {}, $class;
 
     $self->command_name(shift) if @_;
 
-    $self->items([]);
-    $self->subcommands([]);
+    $self->items(       [] );
+    $self->subcommands( [] );
     $self->no_response(0);
 
     return $self;
-} 
+}
 
 =head2 as_xml
 
@@ -164,108 +167,169 @@ sub as_xml {
     my $self = shift;
 
     my $x = XML::Builder->new;
-    
-    $x->_elt($self->command_name, sub {
-	$x->CmdID($self->command_id);
 
-	if ($self->meta_hash and %{ $self->meta_hash }) {
-	    my %mh = %{ $self->meta_hash };
-	    $x->Meta(sub{
-		if (defined $mh{'AnchorNext'} or defined $mh{'AnchorLast'}) {
-		    $x->Anchor(xmlns => 'syncml:metinf', sub {
-			$x->Next($mh{'AnchorNext'}) if defined $mh{'AnchorNext'};
-			$x->Last($mh{'AnchorLast'}) if defined $mh{'AnchorLast'};
-		    }); 
-		} 
-		while (my ($k, $v) = each %mh) {
-		    next if $k =~ /^Anchor/;
-		    # Yes, this is 'xmlns', not 'xml:ns'.  SyncML is weird like
-		    # that.
-		    $x->_elt($k, xmlns => 'syncml:metinf', $v);
-		} 
-	    });
-	} 
+    $x->_elt(
+        $self->command_name,
+        sub {
+            $x->CmdID( $self->command_id );
 
-	if ($self->command_name eq 'Status' or $self->command_name eq 'Results') {
-	    $x->MsgRef($self->message_reference);
-	    $x->CmdRef($self->command_reference);
-	    $x->Cmd($self->command_name_reference) if $self->command_name eq 'Status';
-	    $x->TargetRef($self->target_reference)
-		if defined_and_length($self->target_reference);
-	    $x->SourceRef($self->source_reference)
-		if defined_and_length($self->source_reference);
+            if ( $self->meta_hash and %{ $self->meta_hash } ) {
+                my %mh = %{ $self->meta_hash };
+                $x->Meta(
+                    sub {
+                        if (   defined $mh{'AnchorNext'}
+                            or defined $mh{'AnchorLast'} )
+                        {
+                            $x->Anchor(
+                                xmlns => 'syncml:metinf',
+                                sub {
+                                    $x->Next( $mh{'AnchorNext'} )
+                                        if defined $mh{'AnchorNext'};
+                                    $x->Last( $mh{'AnchorLast'} )
+                                        if defined $mh{'AnchorLast'};
+                                }
+                            );
+                        }
+                        while ( my ( $k, $v ) = each %mh ) {
+                            next if $k =~ /^Anchor/;
 
-	    if ($self->command_name eq 'Status') {
-		$x->Data($self->status_code);
-	    } else { # Results
-		$x->Item(sub {
-		    $x->Source(sub {
-			$x->LocURI($self->source_uri);
-		    }) if defined_and_length $self->source_uri;
-		    $x->Data(sub {
-			$x->_x($self->_devinfo);
-		    }) if $self->include_device_info;
-		});
-	    } 
-	} else { # not Status or Results: a real command
-	    $x->NoResp if $self->no_response;
-	    $x->Data($self->alert_code) if $self->command_name eq 'Alert';
-	    if ($self->command_name eq 'Map' or $self->command_name eq 'Sync') {
-		$x->Target(sub{
-		    $x->LocURI($self->target_uri);
-		});
-		$x->Source(sub{
-		    $x->LocURI($self->source_uri);
-		});
-	    } 
-	} 
+                   # Yes, this is 'xmlns', not 'xml:ns'.  SyncML is weird like
+                   # that.
+                            $x->_elt( $k, xmlns => 'syncml:metinf', $v );
+                        }
+                    }
+                );
+            }
 
-	for my $subcommand (@{ $self->subcommands }) {
-	    $x->_x($subcommand->as_xml);
-	} 
+            if (   $self->command_name eq 'Status'
+                or $self->command_name eq 'Results' )
+            {
+                $x->MsgRef( $self->message_reference );
+                $x->CmdRef( $self->command_reference );
+                $x->Cmd( $self->command_name_reference )
+                    if $self->command_name eq 'Status';
+                $x->TargetRef( $self->target_reference )
+                    if defined_and_length( $self->target_reference );
+                $x->SourceRef( $self->source_reference )
+                    if defined_and_length( $self->source_reference );
 
-	my $is_map = $self->command_name eq 'Map';
+                if ( $self->command_name eq 'Status' ) {
+                    $x->Data( $self->status_code );
+                } else {    # Results
+                    $x->Item(
+                        sub {
+                            $x->Source(
+                                sub {
+                                    $x->LocURI( $self->source_uri );
+                                }
+                                )
+                                if defined_and_length $self->source_uri;
+                            $x->Data(
+                                sub {
+                                    $x->_x( $self->_devinfo );
+                                }
+                                )
+                                if $self->include_device_info;
+                        }
+                    );
+                }
+            } else {    # not Status or Results: a real command
+                $x->NoResp if $self->no_response;
+                $x->Data( $self->alert_code )
+                    if $self->command_name eq 'Alert';
+                if (   $self->command_name eq 'Map'
+                    or $self->command_name eq 'Sync' )
+                {
+                    $x->Target(
+                        sub {
+                            $x->LocURI( $self->target_uri );
+                        }
+                    );
+                    $x->Source(
+                        sub {
+                            $x->LocURI( $self->source_uri );
+                        }
+                    );
+                }
+            }
 
-	# Handle Items / MapItems
-	for my $item (@{ $self->items }) {
-	    my $tagname = $is_map ? 'MapItem' : 'Item';
-	    $x->$tagname(sub {
-		$x->Target(sub{
-		    $x->LocURI($item->{'target_uri'});
-		}) if defined $item->{'target_uri'};
-		$x->Source(sub{
-		    $x->LocURI($item->{'source_uri'});
-		}) if defined $item->{'source_uri'};
+            for my $subcommand ( @{ $self->subcommands } ) {
+                $x->_x( $subcommand->as_xml );
+            }
 
-		unless ($is_map) {
-		    $x->Data($item->{'data'}) if defined $item->{'data'};
+            my $is_map = $self->command_name eq 'Map';
 
-		    if ($item->{'meta'} and %{ $item->{'meta'} }) {
-			my %mh = %{ $item->{'meta'} };
-			# bad hack: status probably gets to have Meta too
-			my $tagname = $self->command_name eq 'Status' ? 'Data' : 'Meta';
-			$x->$tagname(sub{
-			    if (defined $mh{'AnchorNext'} or defined $mh{'AnchorLast'}) {
-				$x->Anchor(xmlns => 'syncml:metinf', sub {
-				    $x->Next($mh{'AnchorNext'}) if defined $mh{'AnchorNext'};
-				    $x->Last($mh{'AnchorLast'}) if defined $mh{'AnchorLast'};
-				}); 
-			    } 
-			    while (my ($k, $v) = each %mh) {
-				next if $k =~ /^Anchor/;
-				# Yes, this is 'xmlns', not 'xml:ns'.  SyncML is weird like
-				# that.
-				$x->_elt($k, xmlns => 'syncml:metinf', $v);
-			    } 
-			});
-		    } 
-		} 
-	    });
-	} 
-    });
-    
+            # Handle Items / MapItems
+            for my $item ( @{ $self->items } ) {
+                my $tagname = $is_map ? 'MapItem' : 'Item';
+                $x->$tagname(
+                    sub {
+                        $x->Target(
+                            sub {
+                                $x->LocURI( $item->{'target_uri'} );
+                            }
+                            )
+                            if defined $item->{'target_uri'};
+                        $x->Source(
+                            sub {
+                                $x->LocURI( $item->{'source_uri'} );
+                            }
+                            )
+                            if defined $item->{'source_uri'};
+
+                        unless ($is_map) {
+                            $x->Data( $item->{'data'} )
+                                if defined $item->{'data'};
+
+                            if ( $item->{'meta'} and %{ $item->{'meta'} } ) {
+                                my %mh = %{ $item->{'meta'} };
+
+                             # bad hack: status probably gets to have Meta too
+                                my $tagname = $self->command_name eq 'Status'
+                                    ? 'Data'
+                                    : 'Meta';
+                                $x->$tagname(
+                                    sub {
+                                        if (   defined $mh{'AnchorNext'}
+                                            or defined $mh{'AnchorLast'} )
+                                        {
+                                            $x->Anchor(
+                                                xmlns => 'syncml:metinf',
+                                                sub {
+                                                    $x->Next(
+                                                        $mh{'AnchorNext'} )
+                                                        if defined $mh{
+                                                        'AnchorNext'};
+                                                    $x->Last(
+                                                        $mh{'AnchorLast'} )
+                                                        if defined $mh{
+                                                        'AnchorLast'};
+                                                }
+                                            );
+                                        }
+                                        while ( my ( $k, $v ) = each %mh ) {
+                                            next if $k =~ /^Anchor/;
+
+                   # Yes, this is 'xmlns', not 'xml:ns'.  SyncML is weird like
+                   # that.
+                                            $x->_elt(
+                                                $k,
+                                                xmlns => 'syncml:metinf',
+                                                $v
+                                            );
+                                        }
+                                    }
+                                );
+                            }
+                        }
+                    }
+                );
+            }
+        }
+    );
+
     return $x->_output;
-} 
+}
 
 =head2 new_from_xml $string
 
@@ -275,115 +339,143 @@ Creates a new L<SyncML::Message> from the XML document C<$string>.
 
 sub new_from_xml {
     my $class = shift;
-    my $text = shift;
-    
+    my $text  = shift;
+
     my $twig = XML::Twig->new;
     $twig->parse($text);
 
-    return $class->_new_from_twig($twig->root);
+    return $class->_new_from_twig( $twig->root );
 }
 
 sub _new_from_twig {
-    my $class = shift;
+    my $class   = shift;
     my $command = shift;
 
     my $self = bless {}, $class;
 
-    $self->items([]);
-    $self->subcommands([]);
+    $self->items(       [] );
+    $self->subcommands( [] );
 
-    $self->command_name($command->tag);
-    $self->command_id($command->first_child_text('CmdID'));
+    $self->command_name( $command->tag );
+    $self->command_id( $command->first_child_text('CmdID') );
 
-    if ($self->command_name eq 'Status') {
-	$self->message_reference($command->first_child_text('MsgRef'));
-	$self->command_reference($command->first_child_text('CmdRef'));
-	$self->command_name_reference($command->first_child_text('Cmd'));
-	$self->target_reference($command->first_child_text('TargetRef'));
-	$self->source_reference($command->first_child_text('SourceRef'));
-	$self->status_code($command->first_child_text('Data'));
+    if ( $self->command_name eq 'Status' ) {
+        $self->message_reference( $command->first_child_text('MsgRef') );
+        $self->command_reference( $command->first_child_text('CmdRef') );
+        $self->command_name_reference( $command->first_child_text('Cmd') );
+        $self->target_reference( $command->first_child_text('TargetRef') );
+        $self->source_reference( $command->first_child_text('SourceRef') );
+        $self->status_code( $command->first_child_text('Data') );
     } else {
-	$self->no_response( $command->has_child('NoResp') ? 1 : 0 );
-	$self->alert_code($command->first_child_text('Data')) if $self->command_name eq 'Alert';
+        $self->no_response( $command->has_child('NoResp') ? 1 : 0 );
+        $self->alert_code( $command->first_child_text('Data') )
+            if $self->command_name eq 'Alert';
 
-	if ($self->command_name eq 'Map' or $self->command_name eq 'Sync') {
-	    my $target = $command->first_child('Target');
-	    $self->target_uri($target ? $target->first_child_text('LocURI') : '');
-	    my $source = $command->first_child('Source');
-	    $self->source_uri($source ? $source->first_child_text('LocURI') : '');
-	} 
-	
-	# Could possibly support more nested things
-	for my $kid ($command->children(qr/^(?:Add|Copy|Delete|Replace)$/)) {
-	    my $command_obj = SyncML::Message::Command->_new_from_twig($kid);
-	    push @{ $self->subcommands }, $command_obj;
-	} 
+        if ( $self->command_name eq 'Map' or $self->command_name eq 'Sync' ) {
+            my $target = $command->first_child('Target');
+            $self->target_uri(
+                $target ? $target->first_child_text('LocURI') : '' );
+            my $source = $command->first_child('Source');
+            $self->source_uri(
+                $source ? $source->first_child_text('LocURI') : '' );
+        }
 
-	for my $item ($command->children($self->command_name eq 'Map' ? 'MapItem' : 'Item')) {
-	    my $item_struct = {};
-	    my $target = $item->first_child('Target');
-	    $item_struct->{'target_uri'} = $target->first_child_text('LocURI') if $target;
-	    my $source = $item->first_child('Source');
-	    $item_struct->{'source_uri'} = $source->first_child_text('LocURI') if $source;
-	    $item_struct->{'data'} = $item->first_child_text('Data');
+        # Could possibly support more nested things
+        for my $kid ( $command->children(qr/^(?:Add|Copy|Delete|Replace)$/) )
+        {
+            my $command_obj = SyncML::Message::Command->_new_from_twig($kid);
+            push @{ $self->subcommands }, $command_obj;
+        }
 
-	    my $meta_hash = {};
-	    my $meta = $item->first_child('Meta');
-	    if ($meta) {
-		for my $kid ($meta->children) {
-		    next if $kid->tag eq 'Mem'; # don't feel like dealing with its nesting
+        for my $item (
+            $command->children(
+                $self->command_name eq 'Map' ? 'MapItem' : 'Item'
+            )
+            )
+        {
+            my $item_struct = {};
+            my $target      = $item->first_child('Target');
+            $item_struct->{'target_uri'} = $target->first_child_text('LocURI')
+                if $target;
+            my $source = $item->first_child('Source');
+            $item_struct->{'source_uri'} = $source->first_child_text('LocURI')
+                if $source;
+            $item_struct->{'data'} = $item->first_child_text('Data');
 
-		    if ($kid->tag eq 'Anchor') {
-			$meta_hash->{'AnchorLast'} = $kid->first_child_text('Last');
-			$meta_hash->{'AnchorNext'} = $kid->first_child_text('Next');
-		    } else {
-			$meta_hash->{$kid->tag} = $kid->text;
-		    } 
-		} 
-	    } 
-	    $item_struct->{'meta'} = $meta_hash;
-	    
-	    push @{ $self->items }, $item_struct;
-	} 
+            my $meta_hash = {};
+            my $meta      = $item->first_child('Meta');
+            if ($meta) {
+                for my $kid ( $meta->children ) {
+                    next
+                        if $kid->tag eq
+                        'Mem';    # don't feel like dealing with its nesting
+
+                    if ( $kid->tag eq 'Anchor' ) {
+                        $meta_hash->{'AnchorLast'}
+                            = $kid->first_child_text('Last');
+                        $meta_hash->{'AnchorNext'}
+                            = $kid->first_child_text('Next');
+                    } else {
+                        $meta_hash->{ $kid->tag } = $kid->text;
+                    }
+                }
+            }
+            $item_struct->{'meta'} = $meta_hash;
+
+            push @{ $self->items }, $item_struct;
+        }
     }
 
     return $self;
-} 
+}
 
 sub _devinfo {
     my $self = shift;
 
     my $x = XML::Builder->new;
 
-    $x->DevInf(xmlns => "syncml:devinf", sub {
-	$x->VerDTD("1.1");
-	$x->Man('bps');
-	$x->Mod('SyncML::Engine');
-	$x->SwV('0.1');
-	$x->HwV('perl');
-	$x->DevID('xyzzy');
-	$x->DevTyp('server');
+    $x->DevInf(
+        xmlns => "syncml:devinf",
+        sub {
+            $x->VerDTD("1.1");
+            $x->Man('bps');
+            $x->Mod('SyncML::Engine');
+            $x->SwV('0.1');
+            $x->HwV('perl');
+            $x->DevID('xyzzy');
+            $x->DevTyp('server');
 
-	$x->DataStore(sub{
-	    $x->SourceRef('./tasks');
-	    $x->DisplayName('Tasks');
-	    $x->_elt('Rx-Pref', sub {
-		$x->CTType('text/calendar');
-		$x->VerCT('2.0');
-	    });
-	    $x->_elt('Tx-Pref', sub {
-		$x->CTType('text/calendar');
-		$x->VerCT('2.0');
-	    });
-	    $x->SyncCap(sub{
-		$x->SyncType('1');
-		$x->SyncType('2');
-	    });
-	});
-    });
+            $x->DataStore(
+                sub {
+                    $x->SourceRef('./tasks');
+                    $x->DisplayName('Tasks');
+                    $x->_elt(
+                        'Rx-Pref',
+                        sub {
+                            $x->CTType('text/calendar');
+                            $x->VerCT('2.0');
+                        }
+                    );
+                    $x->_elt(
+                        'Tx-Pref',
+                        sub {
+                            $x->CTType('text/calendar');
+                            $x->VerCT('2.0');
+                        }
+                    );
+                    $x->SyncCap(
+                        sub {
+                            $x->SyncType('1');
+                            $x->SyncType('2');
+                        }
+                    );
+                }
+            );
+        }
+    );
 
     return $x->_output;
-} 
+}
 
 =head1 DIAGNOSTICS
 

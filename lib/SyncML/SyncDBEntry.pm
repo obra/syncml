@@ -9,7 +9,6 @@ use Carp;
 use DateTime;
 use Data::ICal;
 
-
 =head1 NAME
 
 SyncML::SyncDBEntry - Representation of client's copy of a syncable item
@@ -45,10 +44,10 @@ Creates a new L<SyncML::SyncDBEntry>.
 
 sub new {
     my $class = shift;
-    my $self = bless {}, $class;
+    my $self  = bless {}, $class;
 
     return $self;
-} 
+}
 
 =head2 content [$content]
 
@@ -72,7 +71,8 @@ as an opaque string.
 
 =cut
 
-__PACKAGE__->mk_accessors(qw/content type application_identifier client_identifier/);
+__PACKAGE__->mk_accessors(
+    qw/content type application_identifier client_identifier/);
 
 =head2 content_as_object
 
@@ -81,7 +81,7 @@ See L<SyncML::ContentAsObject> for more information.
 
 =cut
 
-__PACKAGE__->mk_object_accessor(content_as_object => qw/content type/); 
+__PACKAGE__->mk_object_accessor( content_as_object => qw/content type/ );
 
 =head1 DIAGNOSTICS
 

@@ -13,7 +13,6 @@ use XML::Builder;
 
 use SyncML::Message::Command;
 
-
 =head1 NAME
 
 SyncML::Message - Represents a SyncML message
@@ -52,15 +51,15 @@ Creates a new L<SyncML::Message>.
 
 sub new {
     my $class = shift;
-    my $self = bless {}, $class;
+    my $self  = bless {}, $class;
 
     $self->final(1);
     $self->no_response(0);
-    $self->commands([]);
+    $self->commands( [] );
     $self->next_command_id(1);
 
     return $self;
-} 
+}
 
 =head2 new_from_xml $string
 
@@ -69,8 +68,8 @@ Creates a new L<SyncML::Message> from the XML document C<$string>.
 =cut
 
 sub new_from_xml {
-    my $class = shift;
-    my $self = bless {}, $class;
+    my $class    = shift;
+    my $self     = bless {}, $class;
     my $document = shift;
 
     my $twig = XML::Twig->new;
@@ -79,42 +78,49 @@ sub new_from_xml {
 
     my $header = $twig->root->first_child('SyncHdr');
 
-    $header->first_child_text('VerDTD') eq '1.1' or warn "Document doesn't declare DTD version 1.1!";
-    $header->first_child_text('VerProto') eq 'SyncML/1.1' or warn "Document doesn't declare specification SyncML/1.1!";
+    $header->first_child_text('VerDTD') eq '1.1'
+        or warn "Document doesn't declare DTD version 1.1!";
+    $header->first_child_text('VerProto') eq 'SyncML/1.1'
+        or warn "Document doesn't declare specification SyncML/1.1!";
 
-    $self->session_id($header->first_child_text('SessionID'));
-    $self->message_id($header->first_child_text('MsgID'));
+    $self->session_id( $header->first_child_text('SessionID') );
+    $self->message_id( $header->first_child_text('MsgID') );
 
-    $self->response_uri($header->first_child_text('RespURI'));
-
-    {
-	my $target = $header->first_child('Target');
-
-	$self->target_uri($target->first_child_text('LocURI'));
-	$self->target_name($target->first_child_text('LocName'))
-	    if $target->has_child('LocName');
-    } 
+    $self->response_uri( $header->first_child_text('RespURI') );
 
     {
-	my $source = $header->first_child('Source');
+        my $target = $header->first_child('Target');
 
-	$self->source_uri($source->first_child_text('LocURI'));
-	$self->source_name($source->first_child_text('LocName'))
-	    if $source->has_child('LocName');
-    } 
+        $self->target_uri( $target->first_child_text('LocURI') );
+        $self->target_name( $target->first_child_text('LocName') )
+            if $target->has_child('LocName');
+    }
 
-    $self->no_response($header->has_child('NoResp') ? 1 : 0);
-    $self->final($twig->root->first_child('SyncBody')->has_child('Final') ? 1 : 0);
-    
-    $self->commands([]);
-    for my $kid ($twig->root->first_child('SyncBody')->children(
-	    qr/^(?:Alert|Copy|Exec|Get|Map|Put|Results|Search|Status|Sync|Add|Replace|Delete)$/)) {
-	my $command_obj = SyncML::Message::Command->_new_from_twig($kid);
-	push @{ $self->commands }, $command_obj;
-    } 
+    {
+        my $source = $header->first_child('Source');
+
+        $self->source_uri( $source->first_child_text('LocURI') );
+        $self->source_name( $source->first_child_text('LocName') )
+            if $source->has_child('LocName');
+    }
+
+    $self->no_response( $header->has_child('NoResp') ? 1 : 0 );
+    $self->final(
+        $twig->root->first_child('SyncBody')->has_child('Final') ? 1 : 0 );
+
+    $self->commands( [] );
+    for my $kid (
+        $twig->root->first_child('SyncBody')->children(
+            qr/^(?:Alert|Copy|Exec|Get|Map|Put|Results|Search|Status|Sync|Add|Replace|Delete)$/
+        )
+        )
+    {
+        my $command_obj = SyncML::Message::Command->_new_from_twig($kid);
+        push @{ $self->commands }, $command_obj;
+    }
 
     return $self;
-} 
+}
 
 =head2 as_xml
 
@@ -128,32 +134,44 @@ sub as_xml {
     my $self = shift;
 
     my $x = XML::Builder->new;
-    $x->SyncML(sub{
-	$x->SyncHdr(sub{
-	    $x->VerDTD('1.1');
-	    $x->VerProto('SyncML/1.1');
-	    $x->SessionID($self->session_id);
-	    $x->MsgID($self->message_id);
-	    $x->RespURI($self->response_uri) if $self->response_uri;
-	    $x->Target(sub{
-		$x->LocURI($self->target_uri);
-		$x->LocName($self->target_name) if defined $self->target_name;
-	    });
-	    $x->Source(sub{
-		$x->LocURI($self->source_uri);
-		$x->LocName($self->source_name) if defined $self->source_name;
-	    });
-	    $x->NoResp if $self->no_response;
-	});
-	$x->SyncBody(sub{
-	    for my $command (@{ $self->commands }) {
-		$x->_x($command->as_xml);
-	    } 
-	    $x->Final if $self->final;
-	});
-    });
+    $x->SyncML(
+        sub {
+            $x->SyncHdr(
+                sub {
+                    $x->VerDTD('1.1');
+                    $x->VerProto('SyncML/1.1');
+                    $x->SessionID( $self->session_id );
+                    $x->MsgID( $self->message_id );
+                    $x->RespURI( $self->response_uri ) if $self->response_uri;
+                    $x->Target(
+                        sub {
+                            $x->LocURI( $self->target_uri );
+                            $x->LocName( $self->target_name )
+                                if defined $self->target_name;
+                        }
+                    );
+                    $x->Source(
+                        sub {
+                            $x->LocURI( $self->source_uri );
+                            $x->LocName( $self->source_name )
+                                if defined $self->source_name;
+                        }
+                    );
+                    $x->NoResp if $self->no_response;
+                }
+            );
+            $x->SyncBody(
+                sub {
+                    for my $command ( @{ $self->commands } ) {
+                        $x->_x( $command->as_xml );
+                    }
+                    $x->Final if $self->final;
+                }
+            );
+        }
+    );
     return $x->_output;
-} 
+}
 
 =head2 stamp_command_id $command
 
@@ -162,12 +180,12 @@ Sets the command_id of C<$command> to C<next_command_id> and increment C<next_co
 =cut
 
 sub stamp_command_id {
-    my $self = shift;
+    my $self    = shift;
     my $command = shift;
-    $command->command_id($self->next_command_id);
+    $command->command_id( $self->next_command_id );
     $self->next_command_id( $self->next_command_id + 1 );
     return;
-} 
+}
 
 =head2 commands
 
@@ -228,8 +246,10 @@ XXX TODO FIXME
 
 =cut
 
-__PACKAGE__->mk_accessors(qw/commands session_id message_id target_uri target_name source_uri source_name
-                             response_uri no_response final next_command_id sent_status_for_header/);
+__PACKAGE__->mk_accessors(
+    qw/commands session_id message_id target_uri target_name source_uri source_name
+        response_uri no_response final next_command_id sent_status_for_header/
+);
 
 # Checks to make sure that we've sent a status response to all of the commands
 # in the message.
@@ -237,13 +257,12 @@ sub sent_all_status {
     my $self = shift;
     return unless $self->sent_status_for_header;
 
-    for my $command (@{ $self->command }) {
-	return unless $command->sent_all_status;
-    } 
+    for my $command ( @{ $self->command } ) {
+        return unless $command->sent_all_status;
+    }
 
     return 1;
-} 
-
+}
 
 =head1 DIAGNOSTICS
 

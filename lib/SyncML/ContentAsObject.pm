@@ -9,7 +9,6 @@ use Data::ICal;
 
 use Sub::Installer;
 
-
 =head1 NAME
 
 SyncML::ContentAsObject - Mixin to provide MIME type-based object serialization
@@ -60,36 +59,39 @@ is not a valid instance of its type, the constructed accessor returns undef.
 =cut
 
 sub mk_object_accessor {
-    my $class = shift;
-    my $object_accessor_name = shift;
+    my $class                 = shift;
+    my $object_accessor_name  = shift;
     my $content_accessor_name = shift;
-    my $type_accessor_name = shift;
+    my $type_accessor_name    = shift;
 
-    $class->install_sub({ $object_accessor_name => sub {
-	my $self = shift;
-	return $self->__content_as_object($content_accessor_name, $type_accessor_name, @_);
-    }}); 
-} 
-
+    $class->install_sub(
+        {   $object_accessor_name => sub {
+                my $self = shift;
+                return $self->__content_as_object( $content_accessor_name,
+                    $type_accessor_name, @_ );
+                }
+        }
+    );
+}
 
 my %KNOWN_TYPE_CONSTRUCTORS = (
-    'text/calendar' => sub { Data::ICal->new(data => shift) },
-    'text/x-vcalendar' => sub { Data::ICal->new(data => shift) },
+    'text/calendar'    => sub { Data::ICal->new( data => shift ) },
+    'text/x-vcalendar' => sub { Data::ICal->new( data => shift ) },
 );
 
 sub __content_as_object {
-    my $self = shift;
+    my $self             = shift;
     my $content_accessor = shift;
-    my $type_accessor = shift;
+    my $type_accessor    = shift;
 
     my $content = $self->$content_accessor;
     my $type    = $self->$type_accessor;
 
     return unless defined $content and defined $type;
 
-    return unless $KNOWN_TYPE_CONSTRUCTORS{ $type };
-    return $KNOWN_TYPE_CONSTRUCTORS{ $type }->($content);
-} 
+    return unless $KNOWN_TYPE_CONSTRUCTORS{$type};
+    return $KNOWN_TYPE_CONSTRUCTORS{$type}->($content);
+}
 
 =head1 DIAGNOSTICS
 
