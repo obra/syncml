@@ -111,17 +111,9 @@ __PACKAGE__->mk_accessors(
 sub sent_all_status {
     my $self = shift;
 
-    # Some commands don't need a status.
-    return 1
-        if $self->command_name eq 'Status'
-        or $self->command_name eq 'Results';
     return 1 if $self->no_response;
 
     return unless $self->response_status;
-
-    for my $subcommand ( @{ $self->subcommands } ) {
-        return unless $subcommand->sent_all_status;
-    }
 
     return 1;
 }
@@ -545,7 +537,16 @@ sub _build_xml_body {
     }
 } 
 
+sub sent_all_status {
+    my $self = shift;
+    return unless $self->SUPER::sent_all_status;
 
+    for my $subcommand ( @{ $self->subcommands } ) {
+        return unless $subcommand->sent_all_status;
+    }
+
+    return 1;
+}
 
 package SyncML::Message::Command::Add;
 use base qw/SyncML::Message::Command::Imperative/;
@@ -590,6 +591,11 @@ sub _build_xml_body {
         if defined( $self->target_reference );
     $x->SourceRef( $self->source_reference )
         if defined_and_length( $self->source_reference );
+}
+
+sub sent_all_status {
+    # These commands don't require a status.
+    return 1;
 } 
 
 package SyncML::Message::Command::Results;
