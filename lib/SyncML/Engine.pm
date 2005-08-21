@@ -245,7 +245,7 @@ sub handle_map {
 	my $client_id = $item->{source_uri};
 	my $application_id = $item->{target_uri};
 
-	unless (my $syncdb_entry = delete $self->waiting_for_map->{$application_id})
+	unless (my $syncdb_entry = delete $self->waiting_for_map->{$application_id}) {
 	    warn "client wants to tell us its id ($client_id) for a new record with app id '$application_id', but we weren't expecting that!";
 	    next;
 	    $syncdb_entry->client_identifier($client_id);
@@ -273,6 +273,9 @@ sub handle_map {
 # to be more of a state machine than a callback handler.
 sub merge_back_to_server {
     my $self = shift;
+
+    warn "Original agreed state was: ", Dump $self->original_synced_state;
+    warn "Current agreed state is: ", Dump $self->synced_state;
 
     # ...
 } 
@@ -354,7 +357,7 @@ sub handle_ps_sync {
 	   
 	    # syncdb entries in client_database don't have app IDs yet (possibly
 	    # this is poor design)
-	    $syncdb_entry->application_identifier($self->unchanged->{$client_id}->application_identifier;
+	    $syncdb_entry->application_identifier($self->unchanged->{$client_id}->application_identifier);
 	    $self->synced_state->{$client_id} = $syncdb_entry;
 	} else {
 	    # We have it, client doesn't.  Clearly the client deleted it.
@@ -366,7 +369,7 @@ sub handle_ps_sync {
     # Look at the things we've modified.  For these, our change will beat a
     # client deletion.  For now, our change will always beat a client change,
     # but really this should be doing field-by-field merge.
-    for my $client_id keys (%{ $self->changed }) {
+    for my $client_id (keys %{ $self->changed }) {
 	my $server_syncdb_entry = $self->changed->{$client_id};
 
 	my $client_syncdb_entry = delete $self->client_database->{$client_id};
@@ -555,7 +558,7 @@ sub get_unchanged_dead_future_changed {
     my $self = shift;
 
     my $sync_db = $self->get_sync_database;
-    $self->original_synced_state($syncdb);
+    $self->original_synced_state($sync_db);
     my $app_db = $self->get_application_database;
 
     # go through app db put things in either unchanged changed or future
@@ -597,8 +600,6 @@ sub get_unchanged_dead_future_changed {
     while (my ($application_id, $syncable_item) = each %$app_db) {
 	$self->future->{$application_id} = $syncable_item;
     } 
-
-    warn YAML::Dump $self;
 } 
 
 __PACKAGE__->mk_accessors(qw/session_id internal_session_id last_message_id uri_base in_message out_message
