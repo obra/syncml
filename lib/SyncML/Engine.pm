@@ -47,16 +47,11 @@ Creates a new L<SyncML::Engine>.
 
 =cut
 
-my %COMMAND_HANDLERS = (
-    Alert   => 'handle_alert',
-    Sync    => 'handle_sync',
-    Map     => 'handle_map',
-    Get     => 'handle_get',
-    Add     => 'handle_add_or_replace',
-    Replace => 'handle_add_or_replace',
-);
-
-my %POST_SUBCOMMAND_HANDLERS = ( Sync => 'handle_ps_sync', );
+my $PACKAGE_HANDLERS = {
+    1 => 'handle_client_initialization',
+    3 => 'handle_client_modifications',
+    5 => 'handle_client_mapping',
+}; 
 
 sub new {
     my $class = shift;
@@ -64,6 +59,8 @@ sub new {
 
     $self->last_message_id(0);
     $self->anchor(0);
+
+    $self->current_package(1);
 
     $self->_generate_internal_session_id;
 
@@ -96,38 +93,12 @@ sub respond_to_message {
 
     $self->add_status_for_header(200);
 
-    for my $command ( @{ $in_message->commands } ) {
-        $self->respond_to_command($command);
-    }
+    my $package_handler = $PACKAGE_HANDLERS->{$self->current_package};
+    $self->$package_handler;
+
+    warn "didn't send a status to everything" unless $in_message->sent_all_status;
 
     return $out_message;
-}
-
-sub respond_to_command {
-    my $self    = shift;
-    my $command = shift;
-
-    return if $command->command_name eq 'Status';
-
-    # The following method call inserts the status object into the output
-    # message. But note that if you later modify the status object, the
-    # modification will in fact show up in the output message (as you'd
-    # hope).
-    my $status = $self->add_status_for_command($command);
-
-    if ( my $handler = $COMMAND_HANDLERS{ $command->command_name } ) {
-        $self->$handler( $command, $status );
-    } else {
-        $status->status_code(200);
-    }
-
-    for my $subcommand ( @{ $command->subcommands } ) {
-        $self->respond_to_command($subcommand);
-    }
-
-    if ( my $handler = $POST_SUBCOMMAND_HANDLERS{ $command->command_name } ) {
-        $self->$handler($command);
-    }
 }
 
 sub add_status_for_header {
@@ -146,6 +117,8 @@ sub add_status_for_header {
     $status->source_reference( $self->in_message->source_uri );
 
     $status->status_code($status_code);
+
+    $self->in_message->sent_status_for_header(1);
 
     push @{ $self->out_message->commands }, $status;
     return;
@@ -168,6 +141,8 @@ sub add_status_for_command {
     $status->source_reference( $command->source_uri )
         if defined_and_length( $command->source_uri );
 
+    $command->sent_status_for(1);
+
     push @{ $self->out_message->commands }, $status;
     return $status;
 }
@@ -178,7 +153,35 @@ sub _generate_internal_session_id {
     $self->internal_session_id( Digest::MD5::md5_hex(rand) );
 }
 
-sub handle_alert {
+sub handle_client_initialization {
+    my $self = shift;
+
+    # We're in package #1 -- client initialization.
+    # It should contain (in addition to authentication info in the header):
+    #
+    #  * An Alert for each database that the client wants to synchronize (with
+    #    sync anchors)
+    #  * Possibly a Put of device capabilities.
+    #  * Possibly a Get of device capabilities.
+    
+    for my $alert ($self->in_message->commands_named('Alert')) {
+        my $status = $self->add_status_for_command($alert);
+        $self->handle_client_init_alert($alert, $status);
+    } 
+
+    my @puts = $self->in_message->commands_named('Put');
+    for my $put (@puts) {
+        warn "strange put found" unless $put->source_uri eq './devinf11';
+        $self->add_status_for_command($put)->status_code(200);
+    } 
+
+    for my $get ($self->in_message->commands_named('Get')) {
+        my $status = $self->add_status_for_command($get);
+        $self->handle_get($get, $status);
+    } 
+} 
+
+sub handle_client_init_alert {
     my $self    = shift;
     my $command = shift;
     my $status  = shift;
@@ -198,8 +201,7 @@ sub handle_alert {
     push @{ $status->items },
         { meta => { AnchorNext => $item->{'meta'}->{'AnchorNext'} } };
 
-    my $response_alert = SyncML::Message::Command->new;
-    $response_alert->command_name('Alert');
+    my $response_alert = SyncML::Message::Command->new('Alert');
     $self->out_message->stamp_command_id($response_alert);
     push @{ $self->out_message->commands }, $response_alert;
     $response_alert->alert_code('201');    # slow sync
@@ -218,24 +220,27 @@ sub handle_get {
     my $command = shift;
     my $status  = shift;
 
-    $status->status_code(200);
+    if (@{ $command->items } == 1 and $command->items->[0]->{'target_uri'} eq './devinf11') {
+        $status->status_code(200);
 
-    my $results = SyncML::Message::Command->new('Results');
-    $self->out_message->stamp_command_id($results);
+        my $results = SyncML::Message::Command->new('Results');
+        $self->out_message->stamp_command_id($results);
 
-    $results->message_reference( $self->in_message->message_id );
-    $results->command_reference( $command->command_id );
+        $results->message_reference( $self->in_message->message_id );
+        $results->command_reference( $command->command_id );
 
-    $results->target_reference( $command->target_uri )
-        if defined_and_length( $command->target_uri );
-    $results->source_reference( $command->source_uri )
-        if defined_and_length( $command->source_uri );
+        $results->target_reference( $command->target_uri )
+            if defined_and_length( $command->target_uri );
+        $results->source_reference( $command->source_uri )
+            if defined_and_length( $command->source_uri );
 
-    $results->source_uri('./devinf11');
+        $results->source_uri('./devinf11');
+        $results->include_device_info(1);
 
-    $results->include_device_info(1);
-
-    push @{ $self->out_message->commands }, $results;
+        push @{ $self->out_message->commands }, $results;
+    } else {
+        $status->status_code(404);
+    } 
 }
 
 sub handle_map {
@@ -633,9 +638,15 @@ sub get_unchanged_dead_future_changed {
     warn "sorted: " . YAML::Dump $self;
 }
 
+# current_package has legal values 1, 3, or 5 -- represents the current package
+# that we're responding to. 1 is client initialization, 3 is client changes, 5
+# is mapping.
+
 __PACKAGE__->mk_accessors(
     qw/session_id internal_session_id last_message_id uri_base in_message out_message
         anchor done client_database response_sync
+
+	current_package
 
         my_last_anchor client_last_anchor last_sync_seconds
 

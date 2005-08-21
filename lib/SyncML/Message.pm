@@ -162,7 +162,22 @@ sub as_xml {
             );
             $x->SyncBody(
                 sub {
-                    for my $command ( @{ $self->commands } ) {
+                    # XXX TODO FIXME status commands really need to be output
+                    # in the order that the commands came in, but this class
+                    # doesn't have access to the message it's responding to, and
+                    # technically CmdID doesn't *have* to be an increasing
+                    # integer.
+                    my(@status, @results, @other);
+                    for my $cmd (@{ $self->commands }) {
+                        if ($cmd->command_name eq 'Status') {
+                            push @status, $cmd;
+                        } elsif ($cmd->command_name eq 'Results') {
+                            push @results, $cmd;
+                        } else {
+                            push @other, $cmd;
+                        } 
+                    } 
+                    for my $command ( @status, @results, @other ) {
                         $x->_x( $command->as_xml );
                     }
                     $x->Final if $self->final;
@@ -257,12 +272,26 @@ sub sent_all_status {
     my $self = shift;
     return unless $self->sent_status_for_header;
 
-    for my $command ( @{ $self->command } ) {
+    for my $command ( @{ $self->commands } ) {
         return unless $command->sent_all_status;
     }
 
     return 1;
 }
+
+=head2 commands_named $name, [$name ...]
+
+Returns all of the commands contain in the message (at the top level!) whose name
+is one of the specified names.
+
+=cut
+
+sub commands_named {
+    my $self = shift;
+    my %which_commands;
+    $which_commands{$_}++ for @_;
+    return grep $which_commands{ $_->command_name }, @{ $self->commands };
+} 
 
 =head1 DIAGNOSTICS
 
