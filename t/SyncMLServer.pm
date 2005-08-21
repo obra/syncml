@@ -41,7 +41,10 @@ sub post_ok {
         'Content-Type' => "application/vnd.syncml+xml"
     );
     ok( $mech->success, "request successful" );
-    return SyncML::Message->new_from_xml( $mech->content );
+
+    my $response_message = SyncML::Message->new;
+    $response_message->from_xml( $mech->content );
+    return $response_message;
 }
 
 1;

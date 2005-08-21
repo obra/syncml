@@ -598,7 +598,7 @@ sub _build_xml_body {
     $x->TargetRef( $self->target_reference )
         if defined( $self->target_reference );
     $x->SourceRef( $self->source_reference )
-        if defined_and_length( $self->source_reference );
+        if defined( $self->source_reference );
 }
 
 sub _from_twig {

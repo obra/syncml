@@ -53,7 +53,8 @@ sub handle_request {
         $input = XML::WBXML::wbxml_to_xml($input);
     }
 
-    my $in_message = SyncML::Message->new_from_xml($input);
+    my $in_message = SyncML::Message->new;
+    $in_message->from_xml($input);
 
     return unless $in_message;    # should do some sort of output I guess
 

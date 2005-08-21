@@ -61,16 +61,20 @@ sub new {
     return $self;
 }
 
-=head2 new_from_xml $string
+=head2 from_xml $string
 
-Creates a new L<SyncML::Message> from the XML document C<$string>.
+Parses the XML document C<$string> representing a message into the object.
+Should only be called once on any given object.
 
 =cut
 
-sub new_from_xml {
-    my $class    = shift;
-    my $self     = bless {}, $class;
+sub from_xml {
+    my $self     = shift;
     my $document = shift;
+
+    if ($self->{'__parsed__'}++) {
+        die "from_xml called twice on the same object!";
+    }
 
     my $twig = XML::Twig->new;
     eval { $twig->parse($document); };
@@ -116,7 +120,8 @@ sub new_from_xml {
         )
     {
         my $class = SyncML::Message::Command->class_for_command($kid->tag);
-        my $command_obj = $class->new->_from_twig($kid);
+        my $command_obj = $class->new;
+        $command_obj->_from_twig($kid);
         push @{ $self->commands }, $command_obj;
     }
 
