@@ -118,7 +118,7 @@ sub add_status_for_header {
 
     $status->status_code($status_code);
 
-    $self->in_message->sent_status_for_header(1);
+    $self->in_message->response_status_for_header($status);
 
     push @{ $self->out_message->commands }, $status;
     return;
@@ -141,7 +141,7 @@ sub add_status_for_command {
     $status->source_reference( $command->source_uri )
         if defined_and_length( $command->source_uri );
 
-    $command->sent_status_for(1);
+    $command->response_status($status);
 
     push @{ $self->out_message->commands }, $status;
     return $status;

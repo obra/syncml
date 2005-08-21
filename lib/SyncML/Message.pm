@@ -263,14 +263,14 @@ XXX TODO FIXME
 
 __PACKAGE__->mk_accessors(
     qw/commands session_id message_id target_uri target_name source_uri source_name
-        response_uri no_response final next_command_id sent_status_for_header/
+        response_uri no_response final next_command_id response_status_for_header/
 );
 
 # Checks to make sure that we've sent a status response to all of the commands
 # in the message.
 sub sent_all_status {
     my $self = shift;
-    return unless $self->sent_status_for_header;
+    return unless $self->response_status_for_header;
 
     for my $command ( @{ $self->commands } ) {
         return unless $command->sent_all_status;

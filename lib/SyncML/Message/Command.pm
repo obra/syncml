@@ -115,7 +115,7 @@ __PACKAGE__->mk_accessors(
         message_reference command_reference
         command_name_reference target_reference source_reference status_code alert_code
         meta_hash
-        include_device_info sent_status_for/
+        include_device_info response_status/
 );
 
 sub sent_all_status {
@@ -127,7 +127,7 @@ sub sent_all_status {
         or $self->command_name eq 'Results';
     return 1 if $self->no_response;
 
-    return unless $self->sent_status_for;
+    return unless $self->response_status;
 
     for my $subcommand ( @{ $self->subcommands } ) {
         return unless $subcommand->sent_all_status;
