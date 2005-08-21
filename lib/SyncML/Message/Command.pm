@@ -115,7 +115,23 @@ __PACKAGE__->mk_accessors(qw/command_name command_id no_response items subcomman
 			     message_reference command_reference 
 			     command_name_reference target_reference source_reference status_code alert_code
 			     meta_hash
-			     include_device_info/);
+			     include_device_info sent_status_for/);
+
+sub sent_all_status {
+    my $self = shift;
+    
+    # Some commands don't need a status.
+    return 1 if $self->command_name eq 'Status' or $self->command_name eq 'Results';
+    return 1 if $self->no_response;
+
+    return unless $self->sent_status_for;
+
+    for my $subcommand (@{ $self->subcommands }) {
+	return unless $subcommand->sent_all_status;
+    } 
+
+    return 1;
+} 
 
 sub defined_and_length { defined $_[0] and length $_[0] }
 
