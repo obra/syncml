@@ -171,8 +171,8 @@ sub _build_xml_body {
 
 =head2 from_xml $string
 
-Parses the XML document C<$string> into the object.  Should only be called
-once on any given object.
+Parses the XML document C<$string> representing a command into the object.
+Should only be called once on any given object.
 
 A key part of the design here is that C<as_xml> is only expected to be able
 to render the actual commands that we make as XML.  That is, any command that
