@@ -465,7 +465,15 @@ use base qw/SyncML::Message::Command::Imperative/;
 
 sub command_name { "Get" }
 
+sub _from_twig {
+    my $self = shift;
+    my $twig = shift;
+    $self->SUPER::_from_twig($twig);
 
+    if (my $URL = $twig->get_nested_child_text('Item', 'Target', 'LocURI')) {
+        $self->target_uri($URL);
+    } 
+} 
 
 
 package SyncML::Message::Command::Map;
@@ -498,6 +506,15 @@ package SyncML::Message::Command::Put;
 use base qw/SyncML::Message::Command::Imperative/;
 sub command_name { "Put" }
 
+sub _from_twig {
+    my $self = shift;
+    my $twig = shift;
+    $self->SUPER::_from_twig($twig);
+
+    if (my $URL = $twig->get_nested_child_text('Item', 'Source', 'LocURI')) {
+        $self->source_uri($URL);
+    } 
+} 
 
 package SyncML::Message::Command::Search;
 use base qw/SyncML::Message::Command::Imperative/;
@@ -584,9 +601,6 @@ package SyncML::Message::Command::Response;
 use base qw/SyncML::Message::Command/;
 __PACKAGE__->mk_accessors(qw/message_reference 
                              command_reference 
-                        command_name_reference 
-                              target_reference 
-                              source_reference 
                         /);
 sub _build_xml_body {
     my $self = shift;
@@ -594,11 +608,6 @@ sub _build_xml_body {
 
     $x->MsgRef( $self->message_reference );
     $x->CmdRef( $self->command_reference );
-    $x->Cmd( $self->command_name_reference );
-    $x->TargetRef( $self->target_reference )
-        if defined( $self->target_reference );
-    $x->SourceRef( $self->source_reference )
-        if defined( $self->source_reference );
 }
 
 sub _from_twig {
@@ -608,9 +617,6 @@ sub _from_twig {
 
     $self->message_reference     ( $twig->trimmed_field('MsgRef') );
     $self->command_reference     ( $twig->trimmed_field('CmdRef') );
-    $self->command_name_reference( $twig->trimmed_field('Cmd') );
-    $self->target_reference      ( $twig->trimmed_field('TargetRef') );
-    $self->source_reference      ( $twig->trimmed_field('SourceRef') );
 
     return;
 } 
@@ -685,7 +691,12 @@ sub _build_xml_body {
 package SyncML::Message::Command::Status;
 use base qw/SyncML::Message::Command::Response/;
 
-__PACKAGE__->mk_accessors(qw/status_code next_anchor_acknowledgement/);
+__PACKAGE__->mk_accessors(qw/status_code 
+                             next_anchor_acknowledgement
+                        command_name_reference 
+                              target_reference 
+                              source_reference 
+                        /);
 # next_anchor_acknowledgement is, in the case of a Status responding to an
 # Alert, just a duplicate of the Next that the other side sent
 
@@ -697,6 +708,12 @@ sub _build_xml_body {
     $self->SUPER::_build_xml_body($x);
 
     $x->Data( $self->status_code );
+
+    $x->Cmd( $self->command_name_reference );
+    $x->TargetRef( $self->target_reference )
+        if defined( $self->target_reference );
+    $x->SourceRef( $self->source_reference )
+        if defined( $self->source_reference );
 
     $x->Item(sub{
         $x->Data(sub{
@@ -717,6 +734,9 @@ sub _from_twig {
     if (my $next = $twig->get_nested_child_text('Item', 'Data', 'Anchor', 'Next')) {
         $self->next_anchor_acknowledgement($next);
     } 
+    $self->command_name_reference( $twig->trimmed_field('Cmd') );
+    $self->target_reference      ( $twig->trimmed_field('TargetRef') );
+    $self->source_reference      ( $twig->trimmed_field('SourceRef') );
 } 
 
 

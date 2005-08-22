@@ -135,9 +135,9 @@ sub add_status_for_command {
     $status->command_name_reference( $command->command_name );
 
     $status->target_reference( $command->target_uri )
-        if defined_and_length( $command->target_uri );
+        if defined $command->target_uri;
     $status->source_reference( $command->source_uri )
-        if defined_and_length( $command->source_uri );
+        if defined $command->source_uri;
 
     $command->response_status($status);
 
@@ -167,8 +167,7 @@ sub handle_client_initialization {
         $self->handle_client_init_alert($alert, $status);
     } 
 
-    my @puts = $self->in_message->commands_named('Put');
-    for my $put (@puts) {
+    for my $put ($self->in_message->commands_named('Put')) {
         warn "strange put found" unless $put->source_uri eq './devinf11';
         $self->add_status_for_command($put)->status_code(200);
     } 
@@ -194,36 +193,38 @@ sub handle_client_modifications {
 
 sub handle_client_init_alert {
     my $self    = shift;
-    my $command = shift;
+    my $alert_in = shift;
     my $status  = shift;
 
     $status->status_code(200);
 
-    unless ( @{ $command->items } == 1
-        and ( $command->alert_code == 200 or $command->alert_code == 201 ) )
+    unless ( $alert_in->alert_code == 200 or $alert_in->alert_code == 201 )
     {
-        warn "items or alert code wrong";
+        warn "alert code unknown: @{[ $alert_in->alert_code ]}";
         $status->status_code(500);
         return;
     }
 
-    my $item = $command->items->[0];
+    # Copy the Next anchor from the Alert to its Status
+    $status->next_anchor_acknowledgement( $alert_in->next_anchor );
 
-    push @{ $status->items },
-        { meta => { AnchorNext => $item->{'meta'}->{'AnchorNext'} } };
+    # Create a response alert
+    my $alert_out = SyncML::Message::Command::Alert->new;
+    $self->out_message->stamp_command_id($alert_out);
+    push @{ $self->out_message->commands }, $alert_out;
 
-    my $response_alert = SyncML::Message::Command::Alert->new;
-    $self->out_message->stamp_command_id($response_alert);
-    push @{ $self->out_message->commands }, $response_alert;
-    $response_alert->alert_code('201');    # slow sync
+    # For now, let's always Slow Sync
+    $alert_out->alert_code('201');    # slow sync
+
+    # XXX This anchor-choosing algorithm is wrong; we should be pulling it
+    #     from the SyncDB
     my $last_anchor = $self->anchor;
     $self->anchor(time);
-    push @{ $response_alert->items },
-        {
-        meta => { AnchorNext => $self->anchor, AnchorLast => $last_anchor },
-        source_uri => $item->{'target_uri'},
-        target_uri => $item->{'source_uri'},
-        };
+
+    $alert_out->last_anchor($last_anchor);
+    $alert_out->next_anchor($self->anchor);
+    $alert_out->target_db_uri($alert_in->source_db_uri);
+    $alert_out->source_db_uri($alert_in->target_db_uri);
 }
 
 sub handle_get {
@@ -231,26 +232,22 @@ sub handle_get {
     my $command = shift;
     my $status  = shift;
 
-    if (@{ $command->items } == 1 and $command->items->[0]->{'target_uri'} eq './devinf11') {
+    unless ($command->target_uri eq './devinf11') {
+        warn "strange get found: '@{[ $command->source_uri ]}'";
+        $status->status_code(401);
+    } else {
+        # We know how to deal with devinf11; success.
         $status->status_code(200);
 
+        # Make a Results object.
+        # Note that S::M::C::Results is hardcoded to include the appropriate
+        # device info.
         my $results = SyncML::Message::Command::Results->new;
         $self->out_message->stamp_command_id($results);
+        push @{ $self->out_message->commands }, $results;
 
         $results->message_reference( $self->in_message->message_id );
         $results->command_reference( $command->command_id );
-
-        $results->target_reference( $command->target_uri )
-            if defined_and_length( $command->target_uri );
-        $results->source_reference( $command->source_uri )
-            if defined_and_length( $command->source_uri );
-
-        $results->source_uri('./devinf11');
-        $results->include_device_info(1);
-
-        push @{ $self->out_message->commands }, $results;
-    } else {
-        $status->status_code(404);
     } 
 }
 
@@ -667,7 +664,6 @@ __PACKAGE__->mk_accessors(
 # note that unchanged and changed and dead are hashes of SyncDBEntrys, whereas
 # future is a hash of SyncableItems
 
-sub defined_and_length { defined $_[0] and length $_[0] }
 
 =head1 DIAGNOSTICS
 
