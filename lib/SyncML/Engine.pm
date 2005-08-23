@@ -165,6 +165,8 @@ sub _generate_internal_session_id {
 sub authenticated {
     my $self = shift;
     my $user_password = shift;
+    
+    return unless defined $user_password;
 
     my ($user, $password) = $user_password =~ /\A ([^:]*) : (.*) \z/xms;
 
