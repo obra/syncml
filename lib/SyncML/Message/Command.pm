@@ -493,8 +493,8 @@ sub _from_twig {
     my @mappings;
     for my $mapitem ($twig->children('MapItem')) {
         push @mappings, {
-            client_id      => $mapitem->get_nested_child_text('Source', 'LocURI'),
-            application_id => $mapitem->get_nested_child_text('Target', 'LocURI'),
+            client_identifier      => $mapitem->get_nested_child_text('Source', 'LocURI'),
+            application_identifier => $mapitem->get_nested_child_text('Target', 'LocURI'),
         }; 
     } 
     $self->mappings(\@mappings);

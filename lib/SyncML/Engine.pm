@@ -10,16 +10,14 @@ use SyncML::Message;
 use SyncML::Message::Command;
 use SyncML::SyncableItem;
 use SyncML::SyncDBEntry;
+use SyncML::ApplicationInterface;
 use Digest::MD5;
 use MIME::Base64 ();
 use YAML         ();
+my $SYNC_DATABASE        = "eg/syncdb";
 
 use Data::ICal;
 use Data::ICal::Entry::Todo;
-
-use FindBin;
-my $APPLICATION_DATABASE = "eg/database";
-my $SYNC_DATABASE        = "eg/syncdb";
 
 =head1 NAME
 
@@ -50,7 +48,7 @@ Creates a new L<SyncML::Engine>.
 my $PACKAGE_HANDLERS = {
     1 => 'handle_client_initialization',
     3 => 'handle_client_modifications',
-    5 => 'handle_client_mapping',
+    5 => 'handle_client_data_status_and_mapping',
 }; 
 
 sub new {
@@ -61,6 +59,9 @@ sub new {
     $self->anchor(0);
 
     $self->current_package(1);
+
+    $self->synced_states({});
+    $self->waiting_for_maps({});
 
     $self->_generate_internal_session_id;
 
@@ -99,7 +100,9 @@ sub respond_to_message {
         for my $command (@{ $self->in_message->commands }) {
             $self->add_status_for_command($command)->status_code(401);
         } 
-    } elsif ($self->authenticated($in_message->basic_authentication)) {
+    } elsif (my $user = SyncML::ApplicationInterface::authenticated($in_message->basic_authentication)) {
+        $self->authenticated_user($user);
+
         $self->add_status_for_header(200);
 
         my $package_handler = $PACKAGE_HANDLERS->{$self->current_package};
@@ -170,27 +173,6 @@ sub _generate_internal_session_id {
     $self->internal_session_id( Digest::MD5::md5_hex(rand) );
 }
 
-sub authenticated {
-    my $self = shift;
-    my $user_password = shift;
-    
-    return unless defined $user_password;
-
-    my ($user, $password) = $user_password =~ /\A ([^:]*) : (.*) \z/xms;
-
-    return unless defined $user;
-
-    my $syncdb = YAML::LoadFile($SYNC_DATABASE);
-
-    return unless $syncdb;
-    return unless $syncdb->{$user};
-    return unless $syncdb->{$user}{'password'} eq $password;
-
-    $self->authenticated_user($user);
-
-    return 1;
-} 
-
 sub handle_client_initialization {
     my $self = shift;
 
@@ -250,7 +232,7 @@ sub handle_client_modifications {
     #         be Replace commands, or maybe equivalent Adds)
     #  
     #  Our response is package #4 -- server modifications.
-    #  It should contains:
+    #  It should contain:
     #
     #  * Status for Sync and its subcommands
     #  * A Sync containing Adds, Replaces, Deletes
@@ -266,6 +248,33 @@ sub handle_client_modifications {
     } 
 
     $self->current_package(5);
+}
+
+sub handle_client_data_status_and_mapping {
+    my $self = shift;
+
+    # We're in package #5 -- client data status and mapping
+    # It should contain:
+    #
+    #  * Status for Sync and its subcommands
+    #  * A Map for each database synchronized which had server->client Adds,
+    #  
+    #  Our response is package #6 -- server map status
+    #  It should contain:
+    #
+    #  * Status for Map, if received
+
+    for my $map ($self->in_message->commands_named('Map')) {
+        my $status = $self->add_status_for_command($map);
+        $self->handle_client_map($map, $status);
+    } 
+
+    unless ($self->in_message->final) {
+        # XXX TODO FIXME
+        warn "multi-message packages not yet supported!";
+    } 
+
+    $self->done(1);
 } 
 
 sub handle_client_init_alert {
@@ -352,8 +361,8 @@ sub handle_client_sync {
     # into waiting_for_map (also as SyncDBEntrys), indexed by application ID,
     # since they don't have a client ID until after the server receives the Map
     # command in package #5 (at that point they'll be moved into synced_state).
-    my $synced_state;
-    my $waiting_for_map;
+    my $synced_state = {};
+    my $waiting_for_map = {};
 
     # Create a response Sync
     my $sync_out = SyncML::Message::Command::Sync->new;
@@ -477,8 +486,8 @@ sub handle_client_sync {
         $synced_state->{$client_id} = $client_syncdb_entry;
     }
 
-    warn "synced state: ".YAML::Dump($synced_state);
-    warn "wfm: ".YAML::Dump($waiting_for_map);
+    $self->synced_states->{$server_db} = $synced_state;
+    $self->waiting_for_maps->{$server_db} = $waiting_for_map;
 }
 
 sub handle_get {
@@ -505,37 +514,37 @@ sub handle_get {
     } 
 }
 
-sub handle_map {
+sub handle_client_map {
     my $self    = shift;
     my $command = shift;
     my $status  = shift;
 
-    my $db;
+    my $server_db = $command->target_uri;
 
-  # Map commands happen only in the final package, so mark the engine as done.
-    $self->done(1);
+    my $synced_state = $self->synced_states->{$server_db};
+    my $waiting_for_map = $self->waiting_for_maps->{$server_db};
 
-    for my $item ( @{ $command->items } ) {
-        my $client_id      = $item->{source_uri};
-        my $application_id = $item->{target_uri};
+    for my $mapping ( @{ $command->mappings } ) {
+        my $client_id      = $mapping->{client_identifier};
+        my $application_id = $mapping->{application_identifier};
 
         if ( my $syncdb_entry
-            = delete $self->waiting_for_map->{$application_id} )
+            = delete $waiting_for_map->{$application_id} )
         {
             $syncdb_entry->client_identifier($client_id);
-            $self->synced_state->{$client_id} = $syncdb_entry;
+            $synced_state->{$client_id} = $syncdb_entry;
         } else {
             warn
-                "client wants to tell us its id ($client_id) for a new record with app id '$application_id', but we weren't expecting that!";
+                "client wants to tell us its id '$client_id' for a new record with app id '$application_id', but we weren't expecting that!";
         }
     }
 
-    for my $application_id ( keys %{ $self->waiting_for_map } ) {
+    for my $application_id ( keys %$waiting_for_map ) {
         warn
             "failed to get client map response for item with app id '$application_id'... I guess we'll lose it";
     }
 
-    $self->merge_back_to_server;
+    $self->merge_back_to_server($synced_state);
 
     $status->status_code(200);
 }
@@ -547,58 +556,16 @@ sub handle_map {
 #
 # This is somewhat backwards -- the database ought to be able to refuse
 # operations in the merge, which should cause different results in Statuses
-# we've already sent out.  Eit.  This should be fixed when we rewrite the Engine
-# to be more of a state machine than a callback handler.
+# we've already sent out.  Eit.  This should be fixed.
 sub merge_back_to_server {
     my $self = shift;
+    my $synced_state = shift;
 
     warn "Original agreed state was: "
         . YAML::Dump $self->original_synced_state;
-    warn "Current agreed state is: " . YAML::Dump $self->synced_state;
-    exit;
+    warn "Current agreed state is: " . (YAML::Dump($synced_state));
 
     # ...
-}
-
-sub get_application_database {
-    my $self = shift;
-    my $db   = YAML::LoadFile($APPLICATION_DATABASE);
-
-    for my $app_id ( keys %$db ) {
-        my $ic = Data::ICal->new;
-        $ic->add_property( version => "1.0" );
-        my $todo = Data::ICal::Entry::Todo->new;
-        $ic->add_entry($todo);
-        $todo->add_properties( summary => $db->{$app_id}{summary}, );
-
-        my $syncitem = SyncML::SyncableItem->new;
-        $syncitem->application_identifier($app_id);
-        $syncitem->content( $ic->as_string );
-        $syncitem->type("text/x-vcalendar");
-        $syncitem->last_modified_as_seconds( $db->{$app_id}{last_modified} );
-
-        $db->{$app_id} = $syncitem;
-    }
-
-    return $db;
-}
-
-sub save_application_database {
-    my $self = shift;
-    my $db   = shift;
-
-    my $outdb = {};
-
-    for my $app_id ( keys %$db ) {
-        my $syncitem = $db->{$app_id};
-        my $ic       = $syncitem->content_as_object;
-
-        $outdb->{$app_id} = {
-            summary => $ic->entries->[0]->property("summary")->[0]->value,
-            last_modified => $syncitem->last_modified_as_seconds,
-        };
-    }
-    YAML::DumpFile( $APPLICATION_DATABASE, $outdb );
 }
 
 sub get_sync_database {
@@ -655,7 +622,7 @@ sub get_server_differences {
     my $sync_db = shift;
 
     $self->original_synced_state($sync_db);
-    my $app_db = $self->get_application_database;
+    my $app_db = SyncML::ApplicationInterface::get_application_database();
 
   # go through app db put things in either unchanged changed or future
   # depending on existence in sync db and timestamp; delete from sync db while
@@ -703,8 +670,6 @@ sub get_server_differences {
         $diff->future->{$application_id} = $syncable_item;
     }
 
-    warn "diff: " . YAML::Dump $diff;
-
     return $diff;
 }
 
@@ -722,7 +687,9 @@ __PACKAGE__->mk_accessors(
 
         my_last_anchor client_last_anchor last_sync_seconds
 
-        unchanged dead future changed original_synced_state/
+        unchanged dead future changed original_synced_state
+        
+        synced_states waiting_for_maps/
 );
 
 # note that unchanged and changed and dead are hashes of SyncDBEntrys, whereas
