@@ -161,6 +161,16 @@ sub handle_client_initialization {
     #    sync anchors)
     #  * Possibly a Put of device capabilities.
     #  * Possibly a Get of device capabilities.
+    #
+    #  Our response is package #2 -- server initialization.
+    #  It should contain:
+    #  * Status for the SyncHdr
+    #  * Status for the Alert (with a repetition of the client's Next anchor) 
+    #  * Status for the Put, if received 
+    #  * Results (device info) for the Get, if received 
+    #  * Alert for each database to be sychronized (with the alert code that
+    #    will be used -- can be different from the client's choice; and the
+    #    server's Next and Last anchors)
     
     for my $alert ($self->in_message->commands_named('Alert')) {
         my $status = $self->add_status_for_command($alert);
