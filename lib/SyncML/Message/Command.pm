@@ -681,11 +681,21 @@ sub _build_xml_body {
                                 $x->VerCT('2.0');
                             }
                         );
+                        $x->Rx(sub {
+                                $x->CTType('text/x-vcalendar');
+                                $x->VerCT('1.0');
+                            }
+                        );
                         $x->_elt(
                             'Tx-Pref',
                             sub {
                                 $x->CTType('text/calendar');
                                 $x->VerCT('2.0');
+                            }
+                        );
+                        $x->Tx(sub {
+                                $x->CTType('text/x-vcalendar');
+                                $x->VerCT('1.0');
                             }
                         );
                         $x->SyncCap(

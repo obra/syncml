@@ -2,7 +2,7 @@
 sinkie:
   devices:
     893B3206020404217800:
-      ./tasks:
+      tasks:
         client_last_anchor: 87654
         db:
           134219802:

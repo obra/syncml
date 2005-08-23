@@ -91,6 +91,8 @@ sub respond_to_message {
     $out_message->source_uri( $in_message->target_uri );
     $out_message->target_uri( $in_message->source_uri );
 
+    $self->device_uri($in_message->source_uri);
+
     if (not defined $in_message->basic_authentication) {
         $self->add_status_for_header(401);
 
@@ -311,6 +313,16 @@ sub handle_client_sync {
 
     my $client_db = $sync_in->source_uri;
     my $server_db = $sync_in->target_uri;
+
+    my $syncdb = $self->get_sync_database($server_db);
+    
+    unless ($syncdb) {
+        $status->status_code(404);
+        for my $command (@{ $sync_in->subcommands }) {
+            $self->add_status_for_command($command)->status_code(404);
+        } 
+        return;
+    } 
 
     # Since we're in Slow Sync, the subcommands of the Sync ought to be Replaces
     for my $replace (@{ $sync_in->subcommands }) {
@@ -648,8 +660,10 @@ sub save_application_database {
 
 sub get_sync_database {
     my $self = shift;
-    my $database_info
-        = YAML::LoadFile($SYNC_DATABASE)->{'devicename-username-dbname'};
+    my $dbname = shift;
+
+    my $syncdb = YAML::LoadFile($SYNC_DATABASE);
+    return unless my $database_info = $syncdb->{$self->authenticated_user}{'devices'}{$self->device_uri}{$dbname};
 
     $self->$_( $database_info->{$_} )
         for qw/my_last_anchor client_last_anchor last_sync_seconds/;
@@ -762,7 +776,7 @@ __PACKAGE__->mk_accessors(
 
 	current_package
 
-    authenticated_user
+    authenticated_user device_uri
 
         my_last_anchor client_last_anchor last_sync_seconds
 
