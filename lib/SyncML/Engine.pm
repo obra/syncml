@@ -176,6 +176,8 @@ sub authenticated {
     return unless $syncdb->{$user};
     return unless $syncdb->{$user}{'password'} eq $password;
 
+    $self->authenticated_user($user);
+
     return 1;
 } 
 
@@ -321,30 +323,6 @@ sub handle_client_sync {
 
     $sync_out->target_uri($sync_in->source_uri);
     $sync_out->source_uri($sync_in->target_uri);
-}
-
-sub handle_get {
-    my $self    = shift;
-    my $command = shift;
-    my $status  = shift;
-
-    unless ($command->target_uri eq './devinf11') {
-        warn "strange get found: '@{[ $command->source_uri ]}'";
-        $status->status_code(401);
-    } else {
-        # We know how to deal with devinf11; success.
-        $status->status_code(200);
-
-        # Make a Results object.
-        # Note that S::M::C::Results is hardcoded to include the appropriate
-        # device info.
-        my $results = SyncML::Message::Command::Results->new;
-        $self->out_message->stamp_command_id($results);
-        push @{ $self->out_message->commands }, $results;
-
-        $results->message_reference( $self->in_message->message_id );
-        $results->command_reference( $command->command_id );
-    } 
 }
 
 sub handle_map {
@@ -751,6 +729,8 @@ __PACKAGE__->mk_accessors(
         anchor done client_database response_sync
 
 	current_package
+
+    authenticated_user
 
         my_last_anchor client_last_anchor last_sync_seconds
 
