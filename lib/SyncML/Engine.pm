@@ -91,7 +91,13 @@ sub respond_to_message {
     $out_message->source_uri( $in_message->target_uri );
     $out_message->target_uri( $in_message->source_uri );
 
-    if ($self->authenticated($in_message->basic_authentication)) {
+    if (not defined $in_message->basic_authentication) {
+        $self->add_status_for_header(401);
+
+        for my $command (@{ $self->in_message->commands }) {
+            $self->add_status_for_command($command)->status_code(401);
+        } 
+    } elsif ($self->authenticated($in_message->basic_authentication)) {
         $self->add_status_for_header(200);
 
         my $package_handler = $PACKAGE_HANDLERS->{$self->current_package};
@@ -126,7 +132,7 @@ sub add_status_for_header {
 
     $status->status_code($status_code);
 
-    $status->include_basic_challenge(1) if $status_code == 407;
+    $status->include_basic_challenge(1) if $status_code == 407 or $status_code == 401;
 
     $self->in_message->response_status_for_header($status);
 
@@ -325,6 +331,30 @@ sub handle_client_sync {
 
     $sync_out->target_uri($sync_in->source_uri);
     $sync_out->source_uri($sync_in->target_uri);
+}
+
+sub handle_get {
+    my $self    = shift;
+    my $command = shift;
+    my $status  = shift;
+
+    unless ($command->target_uri eq './devinf11') {
+        warn "strange get found: '@{[ $command->source_uri ]}'";
+        $status->status_code(401);
+    } else {
+        # We know how to deal with devinf11; success.
+        $status->status_code(200);
+
+        # Make a Results object.
+        # Note that S::M::C::Results is hardcoded to include the appropriate
+        # device info.
+        my $results = SyncML::Message::Command::Results->new;
+        $self->out_message->stamp_command_id($results);
+        push @{ $self->out_message->commands }, $results;
+
+        $results->message_reference( $self->in_message->message_id );
+        $results->command_reference( $command->command_id );
+    } 
 }
 
 sub handle_map {
