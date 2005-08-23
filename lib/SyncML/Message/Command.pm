@@ -201,7 +201,7 @@ sub _from_twig {
     my $self   = shift;
     my $twig = shift;
 
-    $self->command_id( $twig->trimmed_field('CmdID') );
+    $self->command_id( $twig->slimmed_field('CmdID') );
     $self->no_response( $twig->has_child('NoResp') ? 1 : 0 );
 
     return;
@@ -429,7 +429,7 @@ sub _from_twig {
     my $twig = shift;
     $self->SUPER::_from_twig($twig);
 
-    $self->alert_code( $twig->trimmed_field('Data') );
+    $self->alert_code( $twig->slimmed_field('Data') );
 
     if (my $item = $twig->first_child('Item')) {
         my $target = $item->get_nested_child_text('Target', 'LocURI');
@@ -583,10 +583,24 @@ sub command_name { "Add" }
 
 package SyncML::Message::Command::Replace;
 use base qw/SyncML::Message::Command::Imperative/;
-
+__PACKAGE__->mk_accessors(qw/syncdb_entry/);
 sub command_name { "Replace" }
 
+# XXX implement output of syncdb_entry
 
+sub _from_twig {
+    my $self = shift;
+    my $twig = shift;
+    $self->SUPER::_from_twig($twig);
+
+    my $syncdb_entry = SyncML::SyncDBEntry->new;
+    # It's possibly that we should check also in Item/Meta/Type
+    $syncdb_entry->type             ($twig->get_nested_child_text(qw/Meta Type/));
+    $syncdb_entry->content          ($twig->get_nested_child_text(qw/Item Data/));
+    $syncdb_entry->client_identifier($twig->get_nested_child_text(qw/Item Source LocURI/));
+
+    $self->syncdb_entry($syncdb_entry);
+}
 
 
 package SyncML::Message::Command::Delete;
@@ -615,8 +629,8 @@ sub _from_twig {
     my $twig = shift;
     $self->SUPER::_from_twig($twig);
 
-    $self->message_reference     ( $twig->trimmed_field('MsgRef') );
-    $self->command_reference     ( $twig->trimmed_field('CmdRef') );
+    $self->message_reference     ( $twig->slimmed_field('MsgRef') );
+    $self->command_reference     ( $twig->slimmed_field('CmdRef') );
 
     return;
 } 
@@ -729,14 +743,14 @@ sub _from_twig {
     my $twig = shift;
     $self->SUPER::_from_twig($twig);
 
-    $self->status_code( $twig->trimmed_field('Data') );
+    $self->status_code( $twig->slimmed_field('Data') );
 
     if (my $next = $twig->get_nested_child_text('Item', 'Data', 'Anchor', 'Next')) {
         $self->next_anchor_acknowledgement($next);
     } 
-    $self->command_name_reference( $twig->trimmed_field('Cmd') );
-    $self->target_reference      ( $twig->trimmed_field('TargetRef') );
-    $self->source_reference      ( $twig->trimmed_field('SourceRef') );
+    $self->command_name_reference( $twig->slimmed_field('Cmd') );
+    $self->target_reference      ( $twig->slimmed_field('TargetRef') );
+    $self->source_reference      ( $twig->slimmed_field('SourceRef') );
 } 
 
 
@@ -754,7 +768,23 @@ sub get_nested_child_text {
         $current = $current->first_child($next_tag);
         return unless $current;
     } 
-    return $current->trimmed_text;
+    return $current->slimmed_text;
 } 
 
+ # version of trimmed_text that doesn't trim interior whitespace
+  sub slimmed_text
+    { my $elt= shift;
+      my $text= $elt->text;
+#      $text=~ s{\s+}{ }sg;
+      $text=~ s{^\s*}{};
+      $text=~ s{\s*$}{};
+      return $text;
+    }
+
+sub slimmed_field  
+  { my $elt= shift;
+    my $dest=$elt->first_child(@_) or return '';
+    return $dest->slimmed_text;
+  }
+    
 1;

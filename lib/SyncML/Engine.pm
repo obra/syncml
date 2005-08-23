@@ -189,6 +189,8 @@ sub handle_client_modifications {
     my $self = shift;
 
     # We're in package #3 -- client modifications.
+   
+    warn YAML::Dump($self);
 } 
 
 sub handle_client_init_alert {
