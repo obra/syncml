@@ -307,9 +307,9 @@ sub handle_client_init_alert {
 sub handle_client_sync {
     my $self    = shift;
     my $sync_in = shift;
-    my $status  = shift;
+    my $sync_status  = shift;
 
-    $status->status_code(200);
+    $sync_status->status_code(200);
 
     my $client_db = $sync_in->source_uri;
     my $server_db = $sync_in->target_uri;
@@ -317,12 +317,16 @@ sub handle_client_sync {
     my $syncdb = $self->get_sync_database($server_db);
     
     unless ($syncdb) {
-        $status->status_code(404);
+        $sync_status->status_code(404);
         for my $command (@{ $sync_in->subcommands }) {
             $self->add_status_for_command($command)->status_code(404);
         } 
         return;
     } 
+
+    # $client_database is a hash of SyncDBEntrys indexed by client_identifier.
+    # It represents what the client is saying it has *right now*.
+    my $client_database = {};
 
     # Since we're in Slow Sync, the subcommands of the Sync ought to be Replaces
     for my $replace (@{ $sync_in->subcommands }) {
@@ -330,11 +334,17 @@ sub handle_client_sync {
             warn "non-Replace subcommand found in slow sync: $replace";
             next;
         } 
+
+        # Note that this SyncDBEntry's application_identifier is not yet set
         my $syncdb_entry = $replace->syncdb_entry;
+
+        $client_database->{ $syncdb_entry->client_identifier } = $syncdb_entry;
 
         my $subcommand_status = $self->add_status_for_command($replace);
         $subcommand_status->status_code(200); # XXX if interpreted as an add, should be 201
     } 
+
+    warn YAML::Dump($client_database);
 
     # Create a response Sync
     my $sync_out = SyncML::Message::Command::Sync->new;
@@ -422,58 +432,6 @@ sub merge_back_to_server {
     exit;
 
     # ...
-}
-
-# If they're sending a Sync, that means we need to send a Sync back.
-# This handler isn't actually going to handle the subcommands of the client
-# Sync yet; for now we'll just have it add our Sync.
-sub handle_sync {
-    my $self    = shift;
-    my $command = shift;
-    my $status  = shift;
-
-    $status->status_code(200);
-
-    my $response_sync = SyncML::Message::Command::Sync->new;
-    $self->out_message->stamp_command_id($response_sync);
-    push @{ $self->out_message->commands }, $response_sync;
-    $response_sync->target_uri( $command->source_uri );
-    $response_sync->source_uri( $command->target_uri );
-
-    $self->response_sync($response_sync);
-
-   # Clear out our understanding of the client's database, which we'll restore
-   # from its slow sync response in handle_add_or_replace
-    $self->client_database( {} );
-}
-
-sub handle_add_or_replace {
-    my $self    = shift;
-    my $command = shift;
-    my $status  = shift;
-
-    for my $item ( @{ $command->items } ) {
-        my $content   = $item->{'data'};
-        my $client_id = $item->{'source_uri'};
-
-        unless ( defined $client_id and length $client_id ) {
-            warn "told to add/replace an item, but no client id!";
-            next;
-        }
-
-        my $syncdb_entry = SyncML::SyncDBEntry->new;
-        $syncdb_entry->content($content);
-        $syncdb_entry->type("text/calendar");
-        $syncdb_entry->client_identifier($client_id);
-
-      # I'm not setting the application ID yet, even though it might be in the
-      # sync DB... not sure where the right place to do that is (currently in
-      # handle_ps_sync, but that feels wrong)
-
-        $self->client_database->{$client_id} = $syncdb_entry;
-    }
-
-    $status->status_code(200);
 }
 
 sub handle_ps_sync {
