@@ -1,61 +1,63 @@
 ---
-devicename-username-dbname:
-  client_last_anchor: 87654
-  db:
-    134219802:
-      application_identifier: 12345
-      content: |
-        BEGIN:VCALENDAR
-        PRODID:Data::ICal 0.03
-        VERSION:2.0
-        BEGIN:VTODO
-        SUMMARY:Addition from client 
-        END:VTODO
-        END:VCALENDAR
-      type: text/x-vcalendar
-    167778208:
-      application_identifier: 67890
-      content: |
-        BEGIN:VCALENDAR
-        PRODID:Data::ICal 0.03
-        VERSION:2.0
-        BEGIN:VTODO
-        SUMMARY:A <secondly> one or is it
-        END:VTODO
-        END:VCALENDAR
-      type: text/x-vcalendar
-    201332975:
-      application_identifier: 555
-      content: |
-        BEGIN:VCALENDAR
-        PRODID:Data::ICal 0.03
-        VERSION:2.0
-        BEGIN:VTODO
-        SUMMARY:Bla bar baz
-        END:VTODO
-        END:VCALENDAR
-      type: text/x-vcalendar
-    33560386:
-      application_identifier: 666
-      content: |
-        BEGIN:VCALENDAR
-        PRODID:Data::ICal 0.03
-        VERSION:2.0
-        BEGIN:VTODO
-        SUMMARY:Today from the server
-        END:VTODO
-        END:VCALENDAR
-      type: text/x-vcalendar
-    67114789:
-      application_identifier: 777
-      content: |
-        BEGIN:VCALENDAR
-        PRODID:Data::ICal 0.03
-        VERSION:2.0
-        BEGIN:VTODO
-        SUMMARY:bla bla
-        END:VTODO
-        END:VCALENDAR
-      type: text/x-vcalendar
-  last_sync_seconds: 1124149598
-  my_last_anchor: 1234567
+sinkie:
+  893B3206020404217800:
+    ./tasks:
+      client_last_anchor: 87654
+      db:
+        134219802:
+          application_identifier: 12345
+          content: |
+            BEGIN:VCALENDAR
+            PRODID:Data::ICal 0.03
+            VERSION:2.0
+            BEGIN:VTODO
+            SUMMARY:Addition from client 
+            END:VTODO
+            END:VCALENDAR
+          type: text/x-vcalendar
+        167778208:
+          application_identifier: 67890
+          content: |
+            BEGIN:VCALENDAR
+            PRODID:Data::ICal 0.03
+            VERSION:2.0
+            BEGIN:VTODO
+            SUMMARY:A <secondly> one or is it
+            END:VTODO
+            END:VCALENDAR
+          type: text/x-vcalendar
+        201332975:
+          application_identifier: 555
+          content: |
+            BEGIN:VCALENDAR
+            PRODID:Data::ICal 0.03
+            VERSION:2.0
+            BEGIN:VTODO
+            SUMMARY:Bla bar baz
+            END:VTODO
+            END:VCALENDAR
+          type: text/x-vcalendar
+        33560386:
+          application_identifier: 666
+          content: |
+            BEGIN:VCALENDAR
+            PRODID:Data::ICal 0.03
+            VERSION:2.0
+            BEGIN:VTODO
+            SUMMARY:Today from the server
+            END:VTODO
+            END:VCALENDAR
+          type: text/x-vcalendar
+        67114789:
+          application_identifier: 777
+          content: |
+            BEGIN:VCALENDAR
+            PRODID:Data::ICal 0.03
+            VERSION:2.0
+            BEGIN:VTODO
+            SUMMARY:bla bla
+            END:VTODO
+            END:VCALENDAR
+          type: text/x-vcalendar
+      last_sync_seconds: 1124149598
+      my_last_anchor: 1234567
