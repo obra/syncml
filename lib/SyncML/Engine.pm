@@ -166,8 +166,17 @@ sub authenticated {
     my $self = shift;
     my $user_password = shift;
 
-    # XXX: never authed
-    return;
+    my ($user, $password) = $user_password =~ /\A ([^:]*) : (.*) \z/xms;
+
+    return unless defined $user;
+
+    my $syncdb = YAML::LoadFile($SYNC_DATABASE);
+
+    return unless $syncdb;
+    return unless $syncdb->{$user};
+    return unless $syncdb->{$user}{'password'} eq $password;
+
+    return 1;
 } 
 
 sub handle_client_initialization {
