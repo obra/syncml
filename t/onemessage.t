@@ -35,7 +35,7 @@ sub send_message : Test(21) {
     my $status = $response->commands->[0];
     isa_ok($status, 'SyncML::Message::Command');
     is($status->command_name, 'Status');
-    is($status->status_code, '407');
+    is($status->status_code, '401');
 
     is($status->message_reference, 1);
     is($status->command_reference, 0);
