@@ -575,10 +575,24 @@ sub sent_all_status {
 
 package SyncML::Message::Command::Add;
 use base qw/SyncML::Message::Command::Imperative/;
-
+__PACKAGE__->mk_accessors(qw/syncdb_entry/);
 sub command_name { "Add" }
 
+sub _build_xml_body {
+    my $self = shift;
+    my $x = shift;
+    $self->SUPER::_build_xml_body($x);
 
+    $x->Meta(sub{
+        $x->Type(xmlns => 'syncml:metinf', $self->syncdb_entry->type);
+    });
+    $x->Item(sub{
+        $x->Data($self->syncdb_entry->content); # XXX deal with CDATA?
+        $x->Source(sub{
+            $x->LocURI($self->syncdb_entry->application_identifier);
+        });
+    });
+}
 
 
 package SyncML::Message::Command::Replace;
@@ -586,7 +600,21 @@ use base qw/SyncML::Message::Command::Imperative/;
 __PACKAGE__->mk_accessors(qw/syncdb_entry/);
 sub command_name { "Replace" }
 
-# XXX implement output of syncdb_entry
+sub _build_xml_body {
+    my $self = shift;
+    my $x = shift;
+    $self->SUPER::_build_xml_body($x);
+
+    $x->Meta(sub{
+        $x->Type(xmlns => 'syncml:metinf', $self->syncdb_entry->type);
+    });
+    $x->Item(sub{
+        $x->Data($self->syncdb_entry->content); # XXX deal with CDATA?
+        $x->Target(sub{
+            $x->LocURI($self->syncdb_entry->client_identifier);
+        });
+    });
+}
 
 sub _from_twig {
     my $self = shift;
@@ -605,10 +633,21 @@ sub _from_twig {
 
 package SyncML::Message::Command::Delete;
 use base qw/SyncML::Message::Command::Imperative/;
+__PACKAGE__->mk_accessors(qw/client_identifier/);
 
 sub command_name { "Delete" }
 
+sub _build_xml_body {
+    my $self = shift;
+    my $x = shift;
+    $self->SUPER::_build_xml_body($x);
 
+    $x->Item(sub{
+        $x->Target(sub{
+            $x->LocURI($self->client_identifier);
+        });
+    });
+}
 
 package SyncML::Message::Command::Response;
 # base class for Status and Results

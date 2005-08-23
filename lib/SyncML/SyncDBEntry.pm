@@ -3,7 +3,7 @@ package SyncML::SyncDBEntry;
 use warnings;
 use strict;
 
-use base qw/Class::Accessor SyncML::ContentAsObject/;
+use base qw/Class::Accessor SyncML::ContentAsObject Clone/;
 
 use Carp;
 use DateTime;
