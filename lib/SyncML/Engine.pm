@@ -199,8 +199,33 @@ sub handle_client_modifications {
     my $self = shift;
 
     # We're in package #3 -- client modifications.
+    # It should contain:
+    #
+    #  * Status for server Alerts
+    #  * Status for Put, if Put sent
+    #  * Results, if Get sent
+    #  * Sync for each database being synchronized, containing:
+    #      * Add, Replace, and Delete commands.
+    #        (note: we're doing slow sync, so this is just going to
+    #         be Replace commands, or maybe equivalent Adds)
+    #  
+    #  Our response is package #4 -- server modifications.
+    #  It should contains:
+    #
+    #  * Status for Sync and its subcommands
+    #  * A Sync containing Adds, Replaces, Deletes
    
-    warn YAML::Dump($self);
+    for my $sync ($self->in_message->commands_named('Sync')) {
+        my $status = $self->add_status_for_command($sync);
+        $self->handle_client_sync($sync, $status);
+    } 
+
+    unless ($self->in_message->final) {
+        # XXX TODO FIXME
+        warn "multi-message packages not yet supported!";
+    } 
+
+    $self->current_package(5);
 } 
 
 sub handle_client_init_alert {
@@ -237,6 +262,39 @@ sub handle_client_init_alert {
     $alert_out->next_anchor($self->anchor);
     $alert_out->target_db_uri($alert_in->source_db_uri);
     $alert_out->source_db_uri($alert_in->target_db_uri);
+}
+
+sub handle_client_sync {
+    my $self    = shift;
+    my $sync_in = shift;
+    my $status  = shift;
+
+    $status->status_code(200);
+
+    my $client_db = $sync_in->source_uri;
+    my $server_db = $sync_in->target_uri;
+
+    # Since we're in Slow Sync, the subcommands of the Sync ought to be Replaces
+    for my $replace (@{ $sync_in->subcommands }) {
+        unless ($replace->isa('SyncML::Message::Command::Replace')) {
+            warn "non-Replace subcommand found in slow sync: $replace";
+            next;
+        } 
+        my $syncdb_entry = $replace->syncdb_entry;
+
+        my $subcommand_status = $self->add_status_for_command($replace);
+        $subcommand_status->status_code(200); # XXX if interpreted as an add, should be 201
+
+        warn YAML::Dump($syncdb_entry);
+    } 
+
+    # Create a response Sync
+    my $sync_out = SyncML::Message::Command::Sync->new;
+    $self->out_message->stamp_command_id($sync_out);
+    push @{ $self->out_message->commands }, $sync_out;
+
+    $sync_out->target_uri($sync_in->source_uri);
+    $sync_out->source_uri($sync_in->target_uri);
 }
 
 sub handle_get {
