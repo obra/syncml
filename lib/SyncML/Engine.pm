@@ -344,7 +344,18 @@ sub handle_client_sync {
         $subcommand_status->status_code(200); # XXX if interpreted as an add, should be 201
     } 
 
-    warn YAML::Dump($client_database);
+    # XXX these need to be refactored to *return* structures, not set them as
+    # fields on the object (which prevents multiple DBs per request) 
+    # 
+    # We're going to build up an understanding of what the synchronized state
+    # should be at the end of this transaction in synced_state.  This is a hash
+    # of SyncDBEntrys, indexed by client ID (LUID).  Server additions will go
+    # into waiting_for_map (also as SyncDBEntrys), indexed by application ID,
+    # since they don't have a client ID until after the server receives the Map
+    # command in package #5 (at that point they'll be moved into synced_state).
+    $self->get_unchanged_dead_future_changed; 
+    $self->synced_state(    {} );
+    $self->waiting_for_map( {} );
 
     # Create a response Sync
     my $sync_out = SyncML::Message::Command::Sync->new;
@@ -353,6 +364,131 @@ sub handle_client_sync {
 
     $sync_out->target_uri($sync_in->source_uri);
     $sync_out->source_uri($sync_in->target_uri);
+
+    # Look at the things we haven't touched.  For these, whatever the client
+    # says goes.
+    for my $client_id ( keys %{ $self->unchanged } ) {
+        if ( my $syncdb_entry = delete $client_database->{$client_id} )
+        {
+          # client has it.  so do we, and we haven't changed it.  so we should
+          # make sure that the server ends up with whatever the client has.
+
+          # syncdb entries in client_database don't have app IDs yet (possibly
+          # this is poor design)
+            $syncdb_entry->application_identifier(
+                $self->unchanged->{$client_id}->application_identifier );
+            $self->synced_state->{$client_id} = $syncdb_entry;
+        } else {
+
+            # We have it, client doesn't.  Clearly the client deleted it.
+            # We should, too. So we don't put it into synced_state.
+            # ... do nothing ...
+        }
+    }
+
+    # Look at the things we've modified.  For these, our change will beat a
+    # client deletion.  For now, our change will always beat a client change,
+    # but really this should be doing field-by-field merge.
+    for my $client_id ( keys %{ $self->changed } ) {
+        my $server_syncdb_entry = $self->changed->{$client_id};
+
+        my $client_syncdb_entry = delete $client_database->{$client_id};
+
+       # Whether or not they've deleted it, the server now wins.  In lieu of a
+       # real field-by-field merge support, just send out a Replace from us.
+
+        my $replace = SyncML::Message::Command::Replace->new;
+        $self->out_message->stamp_command_id($replace);
+
+        push @{ $replace->items },
+            {
+            target_uri => $client_id,
+            data       => $server_syncdb_entry->content,
+            };
+        $replace->meta_hash( { Type => $server_syncdb_entry->type, } );
+        push @{ $sync_out->subcommands }, $replace;
+
+        $self->synced_state->{$client_id} = $server_syncdb_entry;
+    }
+
+    # Deal with server-side adds.  (These are easy, since there's no conflict
+    # possible, since there isn't a client ID for them yet!)
+    for my $application_id ( keys %{ $self->future } ) {
+        my $syncable_item = $self->future->{$application_id};
+
+        my $syncdb_entry = SyncML::SyncDBEntry->new;
+        $syncdb_entry->application_identifier($application_id);
+        $syncdb_entry->content( $syncable_item->content );
+        $syncdb_entry->type( $syncable_item->type );
+
+        my $add = SyncML::Message::Command::Add->new;
+        $self->out_message->stamp_command_id($add);
+
+        push @{ $add->items },
+            {
+            source_uri => $application_id,
+            data       => $syncdb_entry->content,
+            };
+        $add->meta_hash( { Type => $syncdb_entry->type, } );
+        push @{ $response_sync->subcommands }, $add;
+
+        $self->waiting_for_map->{$application_id} = $syncdb_entry;
+    }
+
+    # Deal with server-side deletes.  If the client has touched it, then we
+    # forget about the delete and process the client's replace instead.
+    # Otherwise we send a Delete to the client.
+    for my $client_id ( keys %{ $self->dead } ) {
+        my $server_syncdb_entry = $self->dead->{$client_id};
+
+        if ( my $client_syncdb_entry
+            = delete $client_database->{$client_id} )
+        {
+            if (    $client_syncdb_entry->type eq $server_syncdb_entry->type
+                and $client_syncdb_entry->content eq
+                $server_syncdb_entry->content )
+            {
+
+              # The client hasn't changed it, but we've deleted it.  Send them
+              # a delete command.
+                my $delete = SyncML::Message::Command::Delete->new;
+                $self->out_message->stamp_command_id($delete);
+
+                push @{ $delete->items }, { target_uri => $client_id, };
+                push @{ $response_sync->subcommands }, $delete;
+
+                # Don't save anything to synced_state.
+            } else {
+
+                # The client changed it.  Just forget about our attempt at
+                # delete and save what the client wants.
+
+                $client_syncdb_entry->application_identifier(
+                    $server_syncdb_entry->application_identifier );
+
+                $self->synced_state->{$client_id} = $client_syncdb_entry;
+            }
+        } else {
+
+            # We deleted it, the client deleted it.  We don't have to do
+            # anything!
+        }
+    }
+
+    # Everything in client_database that the server thought the client had
+    # before has now been deleted from it.  Thus anything left in
+    # client_database should now count as a client addition.
+
+    for my $client_id ( keys %$client_database ) {
+        my $client_syncdb_entry = $client_database->{$client_id};
+
+        # Note that this SyncDBEntry has undefined application_identifier.
+
+        $self->synced_state->{$client_id} = $client_syncdb_entry;
+    }
+
+    warn "synced state: ".YAML::Dump($self->synced_state);
+    warn "wfm: ".YAML::Dump($self->waiting_for_map);
 }
 
 sub handle_get {
@@ -730,7 +866,7 @@ sub get_unchanged_dead_future_changed {
 
 __PACKAGE__->mk_accessors(
     qw/session_id internal_session_id last_message_id uri_base in_message out_message
-        anchor done client_database response_sync
+        anchor done 
 
 	current_package
 
