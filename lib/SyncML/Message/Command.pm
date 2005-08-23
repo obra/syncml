@@ -710,6 +710,7 @@ __PACKAGE__->mk_accessors(qw/status_code
                         command_name_reference 
                               target_reference 
                               source_reference 
+                            include_basic_challenge
                         /);
 # next_anchor_acknowledgement is, in the case of a Status responding to an
 # Alert, just a duplicate of the Next that the other side sent
@@ -736,6 +737,13 @@ sub _build_xml_body {
             });
         });
     }) if defined $self->next_anchor_acknowledgement;
+
+    $x->Chal(sub{
+        $x->Meta(sub{
+            $x->Format(xmlns => 'syncml:metinf', 'b64');
+            $x->Type(xmlns => 'syncml:metinf', 'syncml:auth-basic');
+        });
+    }) if $self->include_basic_challenge;
 }
 
 sub _from_twig {

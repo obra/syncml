@@ -10,6 +10,7 @@ use base qw/Class::Accessor/;
 use Carp;
 use XML::Twig;
 use XML::Builder;
+use MIME::Base64 ();
 
 use SyncML::Message::Command;
 
@@ -111,6 +112,15 @@ sub from_xml {
     $self->no_response( $header->has_child('NoResp') ? 1 : 0 );
     $self->final(
         $twig->root->first_child('SyncBody')->has_child('Final') ? 1 : 0 );
+
+    if (my $cred = $header->first_child('Cred')) {
+        next unless my $meta = $cred->first_child('Meta');
+        next unless my $type = $meta->first_child('Type');
+        next unless $type->text eq 'syncml:auth-basic';
+        next unless my $data = $cred->first_child('Data');
+
+        $self->basic_authentication(MIME::Base64::decode($data->text));
+    } 
 
     $self->commands( [] );
     for my $kid (
@@ -269,7 +279,8 @@ XXX TODO FIXME
 
 __PACKAGE__->mk_accessors(
     qw/commands session_id message_id target_uri target_name source_uri source_name
-        response_uri no_response final next_command_id response_status_for_header/
+        response_uri no_response final next_command_id response_status_for_header
+        basic_authentication/
 );
 
 # Checks to make sure that we've sent a status response to all of the commands
