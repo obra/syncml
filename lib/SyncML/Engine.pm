@@ -94,6 +94,8 @@ sub respond_to_message {
 
     $self->device_uri($in_message->source_uri);
 
+    $self->debug_warn_statuses;
+
     if (not defined $in_message->basic_authentication) {
         $self->add_status_for_header(401);
 
@@ -172,6 +174,16 @@ sub _generate_internal_session_id {
 
     $self->internal_session_id( Digest::MD5::md5_hex(rand) );
 }
+
+sub debug_warn_statuses {
+    my $self = shift;
+
+    for my $status ($self->in_message->commands_named('Status')) {
+        my $cmd = $status->command_name_reference;
+        my $status_code = $status->status_code;
+        warn "Got Status for $cmd: $status_code\n";
+    } 
+} 
 
 sub handle_client_initialization {
     my $self = shift;
@@ -593,6 +605,8 @@ sub handle_client_map {
         warn
             "failed to get client map response for item with app id '$application_id'... I guess we'll lose it";
     }
+
+    $self->last_sync_seconds(time);
 
     $self->save_sync_database($server_db, $synced_state);
 
