@@ -3,62 +3,63 @@ sinkie:
   devices:
     893B3206020404217800:
       tasks:
-        client_last_anchor: 87654
+        client_last_anchor: ~
         db:
-          134219802:
-            application_identifier: 12345
-            content: |
+          100669111:
+            application_identifier: gefryla
+            content: |-
               BEGIN:VCALENDAR
-              PRODID:Data::ICal 0.03
-              VERSION:2.0
+              VERSION:1.0
               BEGIN:VTODO
-              SUMMARY:Addition from client 
+              SUMMARY:In client addition... or is it?
+              DESCRIPTION:
+              CLASS:PUBLIC
+              PRIORITY:2
+              STATUS:NEEDS ACTION
               END:VTODO
               END:VCALENDAR
             type: text/x-vcalendar
-          167778208:
-            application_identifier: 67890
-            content: |
+          134224280:
+            application_identifier: gobibry
+            content: |-
               BEGIN:VCALENDAR
-              PRODID:Data::ICal 0.03
-              VERSION:2.0
+              VERSION:1.0
               BEGIN:VTODO
-              SUMMARY:A <secondly> one or is it
+              SUMMARY:New in client
+              DESCRIPTION:
+              CLASS:PUBLIC
+              PRIORITY:2
+              STATUS:NEEDS ACTION
               END:VTODO
               END:VCALENDAR
             type: text/x-vcalendar
-          201332975:
-            application_identifier: 555
-            content: |
+          251664626:
+            application_identifier: adsfasdf
+            content: |-
               BEGIN:VCALENDAR
-              PRODID:Data::ICal 0.03
-              VERSION:2.0
+              VERSION:1.0
               BEGIN:VTODO
-              SUMMARY:Bla bar baz
+              SUMMARY:Added on server
+              DESCRIPTION:
+              CLASS:PUBLIC
+              PRIORITY:2
+              STATUS:NEEDS ACTION
               END:VTODO
               END:VCALENDAR
             type: text/x-vcalendar
-          33560386:
-            application_identifier: 666
-            content: |
+          251664807:
+            application_identifier: dygyby
+            content: |-
               BEGIN:VCALENDAR
-              PRODID:Data::ICal 0.03
-              VERSION:2.0
+              VERSION:1.0
               BEGIN:VTODO
-              SUMMARY:Today from the server
+              SUMMARY:In client addition
+              DESCRIPTION:
+              CLASS:PUBLIC
+              PRIORITY:2
+              STATUS:NEEDS ACTION
               END:VTODO
               END:VCALENDAR
             type: text/x-vcalendar
-          67114789:
-            application_identifier: 777
-            content: |
-              BEGIN:VCALENDAR
-              PRODID:Data::ICal 0.03
-              VERSION:2.0
-              BEGIN:VTODO
-              SUMMARY:bla bla
-              END:VTODO
-              END:VCALENDAR
-            type: text/x-vcalendar
-        last_sync_seconds: 1124149598
-        my_last_anchor: 1234567
+        last_sync_seconds: 1124860703
+        my_last_anchor: ~

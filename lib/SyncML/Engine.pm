@@ -281,6 +281,12 @@ sub handle_client_data_status_and_mapping {
         $self->handle_client_map($map, $status);
     } 
 
+    $self->last_sync_seconds(time);
+
+    for my $server_db (keys %{ $self->synced_states }) {
+        $self->save_sync_database($server_db, $self->synced_states->{$server_db});
+    } 
+
     unless ($self->in_message->final) {
         # XXX TODO FIXME
         warn "multi-message packages not yet supported!";
@@ -544,7 +550,7 @@ sub handle_client_sync {
         warn "XXX: application failed to add an item: $ok" unless $ok;
 
         $client_syncdb_entry->application_identifier($application_id);
-
+        
         $synced_state->{$client_id} = $client_syncdb_entry;
     }
 
@@ -605,10 +611,6 @@ sub handle_client_map {
         warn
             "failed to get client map response for item with app id '$application_id'... I guess we'll lose it";
     }
-
-    $self->last_sync_seconds(time);
-
-    $self->save_sync_database($server_db, $synced_state);
 
     $status->status_code(200);
 }
@@ -701,8 +703,15 @@ sub get_server_differences {
                 > $self->last_sync_seconds )
             {
 
-                # Yes, but it's been dirtied.
-                $diff->changed->{$client_id} = $sync_db_entry;
+                # Yes, but it's been dirtied.  Get content/type from
+                # SyncableItem instead (ie, from app).
+                my $new_sync_db_entry = SyncML::SyncDBEntry->new;
+                $new_sync_db_entry->content($syncable_item->content);
+                $new_sync_db_entry->type($syncable_item->type);
+                $new_sync_db_entry->application_identifier($syncable_item->application_identifier);
+                $new_sync_db_entry->client_identifier($client_id);
+
+                $diff->changed->{$client_id} = $new_sync_db_entry;
             } else {
 
                 # Yes, and we haven't touched it.
