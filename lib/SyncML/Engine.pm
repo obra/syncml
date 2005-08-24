@@ -313,6 +313,7 @@ sub handle_client_init_alert {
     $alert_out->source_db_uri($alert_in->target_db_uri);
 }
 
+# XXX break this GIANT FUNCTION up into smaller ones
 sub handle_client_sync {
     my $self    = shift;
     my $sync_in = shift;
@@ -375,21 +376,44 @@ sub handle_client_sync {
     # Look at the things we haven't touched.  For these, whatever the client
     # says goes.
     for my $client_id ( keys %{ $diff->unchanged } ) {
-        if ( my $syncdb_entry = delete $client_database->{$client_id} )
+        my $server_syncdb_entry = $diff->unchanged->{$client_id};
+
+        if ( my $client_syncdb_entry = delete $client_database->{$client_id} )
         {
           # client has it.  so do we, and we haven't changed it.  so we should
           # make sure that the server ends up with whatever the client has.
-
+          
           # syncdb entries in client_database don't have app IDs yet (possibly
           # this is poor design)
-            $syncdb_entry->application_identifier(
-                $diff->unchanged->{$client_id}->application_identifier );
-            $synced_state->{$client_id} = $syncdb_entry;
+          $client_syncdb_entry->application_identifier( $server_syncdb_entry->application_identifier );
+
+          # XXX here is where we would do field-by-field merge
+          
+          # Inform the application of the (possible) change
+          my $syncable_item = SyncML::SyncableItem->new;
+          $syncable_item->content( $client_syncdb_entry->content );
+          $syncable_item->type( $client_syncdb_entry->type );
+          $syncable_item->application_identifier( $client_syncdb_entry->application_identifier );
+          $syncable_item->last_modified_as_seconds( time );
+          my $ok = SyncML::ApplicationInterface::update_item($server_db, $syncable_item);
+
+          # XXX: should translate this into an actual Status failure to the
+          # client.  And not just ignore it.
+          warn "XXX: application failed to update an item: $ok" unless $ok;
+
+          $synced_state->{$client_id} = $client_syncdb_entry;
         } else {
 
             # We have it, client doesn't.  Clearly the client deleted it.
-            # We should, too. So we don't put it into synced_state.
-            # ... do nothing ...
+            # We should, too. So we ask the app to delete it, and we don't put
+            # it into synced_state. 
+            
+            my $ok = SyncML::ApplicationInterface::delete_item($server_db, 
+                    $server_syncdb_entry->application_identifier);
+
+            # XXX: should translate this into an actual Status failure to the
+            # client.  And not just ignore it.
+            warn "XXX: application failed to delete an item: $ok" unless $ok;
         }
     }
 
@@ -443,6 +467,9 @@ sub handle_client_sync {
         if ( my $client_syncdb_entry
             = delete $client_database->{$client_id} )
         {
+            # XXX The following check is probably horribly flawed, since we're
+            # comparing the representation, not the meaning.  Should be using a
+            # field-by-field compare.
             if (    $client_syncdb_entry->type eq $server_syncdb_entry->type
                 and $client_syncdb_entry->content eq
                 $server_syncdb_entry->content )
@@ -465,6 +492,18 @@ sub handle_client_sync {
                 $client_syncdb_entry->application_identifier(
                     $server_syncdb_entry->application_identifier );
 
+                # Inform the application of the resurrection
+                my $syncable_item = SyncML::SyncableItem->new;
+                $syncable_item->content( $client_syncdb_entry->content );
+                $syncable_item->type( $client_syncdb_entry->type );
+                $syncable_item->application_identifier( $client_syncdb_entry->application_identifier );
+                $syncable_item->last_modified_as_seconds( time );
+                my $ok = SyncML::ApplicationInterface::update_item($server_db, $syncable_item);
+
+                # XXX: should translate this into an actual Status failure to
+                # the client.  And not just ignore it.
+                warn "XXX: application failed to resurrect an item: $ok" unless $ok;
+
                 $synced_state->{$client_id} = $client_syncdb_entry;
             }
         } else {
@@ -481,7 +520,18 @@ sub handle_client_sync {
     for my $client_id ( keys %$client_database ) {
         my $client_syncdb_entry = $client_database->{$client_id};
 
-        # Note that this SyncDBEntry has undefined application_identifier.
+        # Inform the application of the addition
+        my $syncable_item = SyncML::SyncableItem->new;
+        $syncable_item->content( $client_syncdb_entry->content );
+        $syncable_item->type( $client_syncdb_entry->type );
+        $syncable_item->last_modified_as_seconds( time );
+        my($ok, $application_id) = SyncML::ApplicationInterface::add_item($server_db, $syncable_item);
+
+        # XXX: should translate this into an actual Status failure to
+        # the client.  And not just ignore it.
+        warn "XXX: application failed to add an item: $ok" unless $ok;
+
+        $client_syncdb_entry->application_identifier($application_id);
 
         $synced_state->{$client_id} = $client_syncdb_entry;
     }
@@ -544,29 +594,11 @@ sub handle_client_map {
             "failed to get client map response for item with app id '$application_id'... I guess we'll lose it";
     }
 
-    $self->merge_back_to_server($synced_state);
+    $self->save_sync_database($server_db, $synced_state);
 
     $status->status_code(200);
 }
 
-# At this point original_synced_state represents the agreed synchronization from
-# last time, and synced_state represents the agreed synchronization from now.
-# Now we diff them, apply the changes to the app database, and save the sync
-# database.
-#
-# This is somewhat backwards -- the database ought to be able to refuse
-# operations in the merge, which should cause different results in Statuses
-# we've already sent out.  Eit.  This should be fixed.
-sub merge_back_to_server {
-    my $self = shift;
-    my $synced_state = shift;
-
-    warn "Original agreed state was: "
-        . YAML::Dump $self->original_synced_state;
-    warn "Current agreed state is: " . (YAML::Dump($synced_state));
-
-    # ...
-}
 
 sub get_sync_database {
     my $self = shift;
@@ -598,6 +630,7 @@ sub get_sync_database {
 
 sub save_sync_database {
     my $self = shift;
+    my $dbname = shift;
     my $db   = shift;
 
     my $outdb = {};
@@ -609,12 +642,16 @@ sub save_sync_database {
                 qw/application_identifier content type/ };
     }
 
+    # Build up the structure for this particular part of the DB
     my $database_info = {};
     $database_info->{$_} = $self->$_
         for qw/my_last_anchor client_last_anchor last_sync_seconds/;
     $database_info->{db} = $outdb;
-    YAML::DumpFile( $SYNC_DATABASE,
-        { 'devicename-username-dbname' => $database_info } );
+    
+    # Load it into the full (multi-user, multi-db) syncdb
+    my $syncdb = YAML::LoadFile($SYNC_DATABASE);
+    $syncdb->{$self->authenticated_user}{'devices'}{$self->device_uri}{$dbname} = $database_info;
+    YAML::DumpFile( $SYNC_DATABASE, $syncdb );
 }
 
 sub get_server_differences {

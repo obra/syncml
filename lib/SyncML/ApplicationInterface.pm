@@ -2,8 +2,15 @@ use strict;
 use warnings;
 
 package SyncML::ApplicationInterface;
+use String::Koremutake;
 
 # This is pretty damn prototypy
+# Anything in this file that doesn't begin with an underscore is called from the
+# Engine, and thus is at least theoretically part of the "API"
+#
+# Note that communication between the Engine and the ApplicationInterface should
+# use SyncableItems, not SyncDBEntrys -- the ApplicationInterface should be
+# unaware of client_identifiers
 use YAML         ();
 
 my $APPLICATION_DATABASE = "eg/database";
@@ -50,7 +57,7 @@ sub get_application_database {
     return $db;
 }
 
-sub save_application_database {
+sub _save_application_database {
     my $db   = shift;
 
     my $outdb = {};
@@ -67,5 +74,47 @@ sub save_application_database {
     YAML::DumpFile( $APPLICATION_DATABASE, $outdb );
 }
 
+# Note that this also gets called if the application deleted something but the
+# client modified it (and the client's mods thus win) -- so this can be called
+# on a deleted item!
+sub update_item {
+    my $dbname = shift; # ignored for now
+    my $syncable_item = shift;
+
+    my $db = get_application_database();
+    $db->{ $syncable_item->application_identifier } = $syncable_item;
+    _save_application_database($db);
+    return 1;
+} 
+
+sub delete_item {
+    my $dbname = shift; # ignored for now
+    my $application_identifier = shift;
+
+    my $db = get_application_database();
+    delete $db->{ $application_identifier };
+    _save_application_database($db);
+    return 1;
+}
+
+sub add_item {
+    my $dbname = shift; # ignored for now
+    my $syncable_item = shift;
+
+    my $db = get_application_database();
+
+    my $k = String::Koremutake->new;
+    my $app_id;
+    FIND_APP_ID:
+    while (1) {
+        $app_id = $k->integer_to_koremutake(int rand(2_000_000));
+        last FIND_APP_ID if !defined $db->{$app_id};
+    } 
+
+    $syncable_item->application_identifier($app_id);
+    $db->{$app_id} = $syncable_item;
+    _save_application_database($db);
+    return (1, $app_id);
+}
 
 1;
