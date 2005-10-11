@@ -5,6 +5,20 @@ sinkie:
       tasks:
         client_last_anchor: ~
         db:
+          151001289:
+            application_identifier: robot
+            content: |-
+              BEGIN:VCALENDAR
+              VERSION:1.0
+              BEGIN:VTODO
+              SUMMARY:Welcome
+              DESCRIPTION:
+              CLASS:PUBLIC
+              PRIORITY:2
+              STATUS:NEEDS ACTION
+              END:VTODO
+              END:VCALENDAR
+            type: text/x-vcalendar
           50337617:
             application_identifier: bifejo
             content: |-
@@ -20,5 +34,5 @@ sinkie:
               END:VTODO
               END:VCALENDAR
             type: text/x-vcalendar
-        last_sync_seconds: 1129053580
+        last_sync_seconds: 1129058570
         my_last_anchor: ~

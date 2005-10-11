@@ -3,7 +3,7 @@ package SyncML::Engine;
 use warnings;
 use strict;
 
-use base qw/Class::Accessor/;
+use base qw/SyncML::Log Class::Accessor/;
 
 use Carp;
 use SyncML::Message;
@@ -96,7 +96,7 @@ sub respond_to_message {
     $self->in_message($in_message);
     $self->out_message($out_message);
 
-    warn "Weird: session ID is different"
+    $self->log->warn("Weird: session ID is different")
         if defined $self->session_id
         and $in_message->session_id ne $self->session_id;
     $self->session_id( $in_message->session_id );
@@ -137,7 +137,7 @@ sub respond_to_message {
     } 
     
 
-    warn "didn't send a status to everything" unless $in_message->sent_all_status;
+    $self->log->warn("didn't send a status to everything") unless $in_message->sent_all_status;
 
     return $out_message;
 }
@@ -239,7 +239,7 @@ sub debug_warn_statuses {
     for my $status ($self->in_message->commands_named('Status')) {
         my $cmd = $status->command_name_reference;
         my $status_code = $status->status_code;
-        warn "Got Status for $cmd: $status_code\n";
+        $self->log->info("Got Status for $cmd: $status_code");
     } 
 } 
 
@@ -276,7 +276,7 @@ sub handle_client_initialization {
     } 
 
     for my $put ($self->in_message->commands_named('Put')) {
-        warn "strange put found" unless $put->source_uri eq './devinf11';
+        $self->log->warn("strange put found") unless $put->source_uri eq './devinf11';
         $self->add_status_for_command($put)->status_code(200);
     } 
 
@@ -287,7 +287,7 @@ sub handle_client_initialization {
 
     unless ($self->in_message->final) {
         # XXX TODO FIXME
-        warn "multi-message packages not yet supported!";
+        $self->log->warn("multi-message packages not yet supported!");
     } 
 
     $self->current_package(3);
@@ -326,7 +326,7 @@ sub handle_client_modifications {
 
     unless ($self->in_message->final) {
         # XXX TODO FIXME
-        warn "multi-message packages not yet supported!";
+        $self->log->warn("multi-message packages not yet supported!");
     } 
 
     $self->current_package(5);
@@ -366,7 +366,7 @@ sub handle_client_data_status_and_mapping {
 
     unless ($self->in_message->final) {
         # XXX TODO FIXME
-        warn "multi-message packages not yet supported!";
+        $self->log->warn("multi-message packages not yet supported!");
     } 
 
     $self->done(1);
@@ -393,7 +393,7 @@ sub handle_client_init_alert {
 
     unless ( $alert_in->alert_code == 200 or $alert_in->alert_code == 201 )
     {
-        warn "alert code unknown: @{[ $alert_in->alert_code ]}";
+        $self->log->warn("alert code unknown: ", $alert_in->alert_code);
         $status->status_code(500);
         return;
     }
@@ -466,7 +466,7 @@ sub handle_client_sync {
     # Since we're in Slow Sync, the subcommands of the Sync ought to be Replaces
     for my $replace (@{ $sync_in->subcommands }) {
         unless ($replace->isa('SyncML::Message::Command::Replace')) {
-            warn "non-Replace subcommand found in slow sync: $replace";
+            $self->log->warn("non-Replace subcommand found in slow sync: $replace");
             next;
         } 
 
@@ -524,7 +524,7 @@ sub handle_client_sync {
 
           # XXX: should translate this into an actual Status failure to the
           # client.  And not just ignore it.
-          warn "XXX: application failed to update an item: $ok" unless $ok;
+          $self->log->error("XXX: application failed to update an item: $ok") unless $ok;
 
           $synced_state->{$client_id} = $client_syncdb_entry;
         } else {
@@ -538,7 +538,7 @@ sub handle_client_sync {
 
             # XXX: should translate this into an actual Status failure to the
             # client.  And not just ignore it.
-            warn "XXX: application failed to delete an item: $ok" unless $ok;
+            $self->log->error("XXX: application failed to delete an item: $ok") unless $ok;
         }
     }
 
@@ -627,7 +627,7 @@ sub handle_client_sync {
 
                 # XXX: should translate this into an actual Status failure to
                 # the client.  And not just ignore it.
-                warn "XXX: application failed to resurrect an item: $ok" unless $ok;
+                $self->log->error("XXX: application failed to resurrect an item: $ok") unless $ok;
 
                 $synced_state->{$client_id} = $client_syncdb_entry;
             }
@@ -654,7 +654,7 @@ sub handle_client_sync {
 
         # XXX: should translate this into an actual Status failure to
         # the client.  And not just ignore it.
-        warn "XXX: application failed to add an item: $ok" unless $ok;
+        $self->log->error("XXX: application failed to add an item: $ok") unless $ok;
 
         $client_syncdb_entry->application_identifier($application_id);
         
@@ -678,7 +678,7 @@ sub handle_get {
     my $status  = shift;
 
     unless ($command->target_uri eq './devinf11') {
-        warn "strange get found: '@{[ $command->source_uri ]}'";
+        $self->log->warn("strange get found: ", $command->source_uri);
         $status->status_code(401);
     } else {
         # We know how to deal with devinf11; success.
@@ -723,14 +723,14 @@ sub handle_client_map {
             $syncdb_entry->client_identifier($client_id);
             $synced_state->{$client_id} = $syncdb_entry;
         } else {
-            warn
-                "client wants to tell us its id '$client_id' for a new record with app id '$application_id', but we weren't expecting that!";
+            $self->log->warn(
+                "client wants to tell us its id '$client_id' for a new record with app id '$application_id', but we weren't expecting that!");
         }
     }
 
     for my $application_id ( keys %$waiting_for_map ) {
-        warn
-            "failed to get client map response for item with app id '$application_id'... I guess we'll lose it";
+        $self->log->warn(
+            "failed to get client map response for item with app id '$application_id'... I guess we'll lose it");
     }
 
     $status->status_code(200);

@@ -4,7 +4,7 @@ use warnings;
 use strict;
 
 use base
-    qw/HTTP::Server::Simple::Recorder HTTP::Server::Simple::CGI Class::Accessor/;
+    qw/SyncML::Log HTTP::Server::Simple::Recorder HTTP::Server::Simple::CGI Class::Accessor/;
 
 use Carp;
 
@@ -111,9 +111,8 @@ address (as calculated by L<Sys::HostIP>.
 
 sub print_banner {
     my $self = shift;
-    print "SyncML::SimpleServer: You can connect to your server at http://"
-        . hostip
-        . ":8080/\n";
+    $self->log->info("You can connect to your server at http://",
+        hostip, ":8080/");
 }
 
 __PACKAGE__->mk_accessors(qw/api/);

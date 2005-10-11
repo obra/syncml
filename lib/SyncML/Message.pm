@@ -5,7 +5,7 @@ our $VERSION = '0.01';
 use warnings;
 use strict;
 
-use base qw/Class::Accessor/;
+use base qw/SyncML::Log Class::Accessor/;
 
 use Carp;
 use XML::Twig;
@@ -84,9 +84,9 @@ sub from_xml {
     my $header = $twig->root->first_child('SyncHdr');
 
     $header->first_child_text('VerDTD') eq '1.1'
-        or warn "Document doesn't declare DTD version 1.1!";
+        or $self->log->warn("Document doesn't declare DTD version 1.1!");
     $header->first_child_text('VerProto') eq 'SyncML/1.1'
-        or warn "Document doesn't declare specification SyncML/1.1!";
+        or $self->log->warn("Document doesn't declare specification SyncML/1.1!");
 
     $self->session_id( $header->first_child_text('SessionID') );
     $self->message_id( $header->first_child_text('MsgID') );
