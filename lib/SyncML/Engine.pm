@@ -38,9 +38,11 @@ SyncML::Engine - Represents the state of a SyncML transaction
 
 =head1 METHODS
 
-=head2 new
+=head2 new $API
 
-Creates a new L<SyncML::Engine>.
+Creates a new L<SyncML::Engine>, which uses the given L<SyncML::API> object
+to communicate with the database backend.  The engine is ready to receive
+the first package: client initialization.
 
 =cut
 
@@ -69,6 +71,21 @@ sub new {
 
     return $self;
 }
+
+=head2 respond_to_message $message
+
+Given a L<SyncML::Message> object $message, interprets and responds to it
+by returning an outgoing L<SyncML::Message>.  It checks the incoming message
+against the API's authentication feature and returns an appropriate error
+code to the client if it fails to authenticate; otherwise, it runs the appropriate
+handler function for the current package.
+
+Once this method has been called, the C<in_message> and C<out_message> methods
+of the engine refer to the messages being parsed and created respectively.
+
+It does not currently handle multi-message packages.
+
+=cut
 
 sub respond_to_message {
     my $self       = shift;
@@ -125,6 +142,17 @@ sub respond_to_message {
     return $out_message;
 }
 
+=head2 add_status_for_header $status_code
+
+This method adds a C<< <Status> >> element to the current outgoing message
+in response to the C<< <SyncHdr> >> on the incoming message, with the given status
+code.
+
+If the status code is 401 or 407, it also sets the status message to include a
+Basic authentication challenge.
+
+=cut
+
 sub add_status_for_header {
     my $self        = shift;
     my $status_code = shift;
@@ -149,6 +177,16 @@ sub add_status_for_header {
     return;
 }
 
+=head2 add_status_for_command $command
+
+This method adds a C<< <Status> >> element to the current outgoing message
+in response to the given L<SyncML::Command> from the incoming message.
+It returns the new L<SyncML::Message::Command::Status> object.
+Note that it does B<not> actually set the C<status_code> of the new object;
+the caller must do this.
+
+=cut
+
 sub add_status_for_command {
     my $self    = shift;
     my $command = shift;
@@ -171,11 +209,29 @@ sub add_status_for_command {
     return $status;
 }
 
+=begin private
+
+=head2 _generate_internal_session_id
+
+Sets the internal session ID (used to construct a response URL) to
+a randomly generated MD5 hex string .
+
+=end private
+
+=cut
+
 sub _generate_internal_session_id {
     my $self = shift;
 
     $self->internal_session_id( Digest::MD5::md5_hex(rand) );
 }
+
+=head2 debug_warn_statuses
+
+Loops through the Status commands received from the client and
+sends a description of them to standard error.
+
+=cut
 
 sub debug_warn_statuses {
     my $self = shift;

@@ -5,61 +5,20 @@ sinkie:
       tasks:
         client_last_anchor: ~
         db:
-          100669111:
-            application_identifier: gefryla
+          50337617:
+            application_identifier: bifejo
             content: |-
               BEGIN:VCALENDAR
               VERSION:1.0
               BEGIN:VTODO
-              SUMMARY:In client addition... or is it?
+              SUMMARY:Good morning sunshine 
               DESCRIPTION:
               CLASS:PUBLIC
+              COMPLETED:20030801T000000
               PRIORITY:2
-              STATUS:NEEDS ACTION
+              STATUS:COMPLETED
               END:VTODO
               END:VCALENDAR
             type: text/x-vcalendar
-          134224280:
-            application_identifier: gobibry
-            content: |-
-              BEGIN:VCALENDAR
-              VERSION:1.0
-              BEGIN:VTODO
-              SUMMARY:New in client
-              DESCRIPTION:
-              CLASS:PUBLIC
-              PRIORITY:2
-              STATUS:NEEDS ACTION
-              END:VTODO
-              END:VCALENDAR
-            type: text/x-vcalendar
-          251664626:
-            application_identifier: adsfasdf
-            content: |-
-              BEGIN:VCALENDAR
-              VERSION:1.0
-              BEGIN:VTODO
-              SUMMARY:Added on server
-              DESCRIPTION:
-              CLASS:PUBLIC
-              PRIORITY:2
-              STATUS:NEEDS ACTION
-              END:VTODO
-              END:VCALENDAR
-            type: text/x-vcalendar
-          251664807:
-            application_identifier: dygyby
-            content: |-
-              BEGIN:VCALENDAR
-              VERSION:1.0
-              BEGIN:VTODO
-              SUMMARY:In client addition
-              DESCRIPTION:
-              CLASS:PUBLIC
-              PRIORITY:2
-              STATUS:NEEDS ACTION
-              END:VTODO
-              END:VCALENDAR
-            type: text/x-vcalendar
-        last_sync_seconds: 1124860703
+        last_sync_seconds: 1129049921
         my_last_anchor: ~
