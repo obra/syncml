@@ -1,38 +1,9 @@
 ---
-sinkie:
+Syncer:
   devices:
     893B3206020404217800:
       tasks:
         client_last_anchor: ~
-        db:
-          151001289:
-            application_identifier: robot
-            content: |-
-              BEGIN:VCALENDAR
-              VERSION:1.0
-              BEGIN:VTODO
-              SUMMARY:Welcome
-              DESCRIPTION:
-              CLASS:PUBLIC
-              PRIORITY:2
-              STATUS:NEEDS ACTION
-              END:VTODO
-              END:VCALENDAR
-            type: text/x-vcalendar
-          50337617:
-            application_identifier: bifejo
-            content: |-
-              BEGIN:VCALENDAR
-              VERSION:1.0
-              BEGIN:VTODO
-              SUMMARY:Good morning sunshine 
-              DESCRIPTION:
-              CLASS:PUBLIC
-              COMPLETED:20030801T000000
-              PRIORITY:2
-              STATUS:COMPLETED
-              END:VTODO
-              END:VCALENDAR
-            type: text/x-vcalendar
+        db: {}
         last_sync_seconds: 1129058570
         my_last_anchor: ~

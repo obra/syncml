@@ -823,7 +823,7 @@ sub get_server_differences {
     my $sync_db = shift;
 
     $self->original_synced_state($sync_db);
-    my $app_db = $self->api->get_application_database();
+    my $app_db = $self->api->get_application_database($self->authorized_user);
 
   # go through app db; put things in either unchanged changed or future
   # depending on existence in sync db and timestamp; delete from sync db while
