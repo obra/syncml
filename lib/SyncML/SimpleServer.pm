@@ -102,6 +102,13 @@ sub engines {
     return $self->{'_syncml_engines'} ||= {};
 }
 
+=head2 print_banner
+
+Overrides the HSS method to print out a banner including the current IP 
+address (as calculated by L<Sys::HostIP>.
+
+=cut
+
 sub print_banner {
     my $self = shift;
     print "SyncML::SimpleServer: You can connect to your server at http://"

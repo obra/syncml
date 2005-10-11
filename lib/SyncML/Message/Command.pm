@@ -108,6 +108,14 @@ __PACKAGE__->mk_accessors(
     qw/command_id no_response target_uri source_uri response_status/
 );
 
+=head2 sent_all_status
+
+Returns a boolean telling whether or not it hasn't had a status command
+created for it yet.  (Commands with subcommands should override this
+method to check their subcommands for status too.)
+
+=cut
+
 sub sent_all_status {
     my $self = shift;
 
@@ -208,11 +216,24 @@ sub _from_twig {
 }
 
 
+=head2 supported_commands 
+
+Returns a list of names of supported SyncML commands.
+
+=cut
+
 my @_SUPPORTED_COMMANDS = qw(    
         Alert  Copy  Exec  Get  Map  Put  Results  Search  Status  Sync  Add  Replace  Delete
 );
 
 sub supported_commands { @_SUPPORTED_COMMANDS }
+
+=head2 supported_commands_regexp
+
+Returns a regular expression matching the supported commands of this
+implementation.
+
+=cut
 
 my $_SUPPORTED_COMMANDS_REGEXP;
 {

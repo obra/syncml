@@ -243,11 +243,12 @@ sub debug_warn_statuses {
     } 
 } 
 
-sub handle_client_initialization {
-    my $self = shift;
+=head2 handle_client_initialization
 
-    # We're in package #1 -- client initialization.
-    # It should contain (in addition to authentication info in the header):
+Handles package #1 -- client initialization.
+
+    # We're in package #1 -- client initialization.  It should contain (in
+    # addition to authentication info in the header):
     #
     #  * An Alert for each database that the client wants to synchronize (with
     #    sync anchors)
@@ -263,7 +264,12 @@ sub handle_client_initialization {
     #  * Alert for each database to be sychronized (with the alert code that
     #    will be used -- can be different from the client's choice; and the
     #    server's Next and Last anchors)
+
+=cut
     
+sub handle_client_initialization {
+    my $self = shift;
+
     for my $alert ($self->in_message->commands_named('Alert')) {
         my $status = $self->add_status_for_command($alert);
         $self->handle_client_init_alert($alert, $status);
@@ -287,8 +293,9 @@ sub handle_client_initialization {
     $self->current_package(3);
 } 
 
-sub handle_client_modifications {
-    my $self = shift;
+=head2 handle_client_modifications
+
+Handles package #3 -- client modifications.
 
     # We're in package #3 -- client modifications.
     # It should contain:
@@ -306,6 +313,11 @@ sub handle_client_modifications {
     #
     #  * Status for Sync and its subcommands
     #  * A Sync containing Adds, Replaces, Deletes
+
+=cut
+
+sub handle_client_modifications {
+    my $self = shift;
    
     for my $sync ($self->in_message->commands_named('Sync')) {
         my $status = $self->add_status_for_command($sync);
@@ -320,10 +332,11 @@ sub handle_client_modifications {
     $self->current_package(5);
 }
 
-sub handle_client_data_status_and_mapping {
-    my $self = shift;
+=head2 handle_client_data_status_and_mapping
 
-    # We're in package #5 -- client data status and mapping
+Handles package #5 -- client data status and mapping.
+
+    # We're in package #5 -- client data status and mapping 
     # It should contain:
     #
     #  * Status for Sync and its subcommands
@@ -333,6 +346,12 @@ sub handle_client_data_status_and_mapping {
     #  It should contain:
     #
     #  * Status for Map, if received
+
+
+=cut
+
+sub handle_client_data_status_and_mapping {
+    my $self = shift;
 
     for my $map ($self->in_message->commands_named('Map')) {
         my $status = $self->add_status_for_command($map);
@@ -352,6 +371,18 @@ sub handle_client_data_status_and_mapping {
 
     $self->done(1);
 } 
+
+=head2 handle_client_init_alert $alert_in, $status_out
+
+Handles the Alert in the client's first message which prepares
+the server to synchronize a database.
+
+Sends a new Alert back to the client.  For now, always forces
+the slow sync.
+
+Returns nothing.
+
+=cut
 
 sub handle_client_init_alert {
     my $self    = shift;
@@ -387,7 +418,25 @@ sub handle_client_init_alert {
     $alert_out->next_anchor($self->anchor);
     $alert_out->target_db_uri($alert_in->source_db_uri);
     $alert_out->source_db_uri($alert_in->target_db_uri);
+    return;
 }
+
+=head2 handle_client_sync $sync_in, $status_out
+
+Given a Sync command from the client and the Status that we are preparing in
+response, looks at all of the Sync's subcommands and processes them.  This
+adds a response Sync to the client which updates it to what it should have.
+This method uses the client's command to figure out what the client has
+and what the server needs to do to update it.
+
+This can update_item, delete_item, and add_item on the API object. Perhaps
+this is wrong as it can break failure atomicity?
+
+It also sets up the synced_states and waiting_for_map structures, representing
+the current understanding of the sync database and the sync db entries added
+by the server waiting for the client to assign client-side LUIDs.
+
+=cut
 
 # XXX break this GIANT FUNCTION up into smaller ones
 sub handle_client_sync {
@@ -616,6 +665,13 @@ sub handle_client_sync {
     $self->waiting_for_maps->{$server_db} = $waiting_for_map;
 }
 
+=head2 handle_get $get_in, $status_out
+
+Handles a client's Get command, presumably asking for the
+device info sheet.
+
+=cut
+
 sub handle_get {
     my $self    = shift;
     my $command = shift;
@@ -639,6 +695,13 @@ sub handle_get {
         $results->command_reference( $command->command_id );
     } 
 }
+
+=head2 handle_client_map $map_in, $status_out
+
+Handles the Map command from the client, which tells the server
+what LUID the client wants to use for a newly-added item.
+
+=cut
 
 sub handle_client_map {
     my $self    = shift;
@@ -673,6 +736,17 @@ sub handle_client_map {
     $status->status_code(200);
 }
 
+=head2 get_sync_database $db_name
+
+Loads the sync database with the specified name for the current user
+(in C<authenticated_user> and device (in C<device_uri>).  Currently
+the DB is stored as a YAML file but this can change.  Reads in
+the anchor information from the database, and returns a hash
+indexed by client ID of SyncDBEntry objects representing the current
+sync DB.
+
+=cut
+
 
 sub get_sync_database {
     my $self = shift;
@@ -702,6 +776,13 @@ sub get_sync_database {
     return $db;
 }
 
+=head2 save_sync_database $db_name, $db_hash
+
+Saves the given hash to the (YAML) sync databse file with the current
+user, device, and given database name.
+
+=cut
+
 sub save_sync_database {
     my $self = shift;
     my $dbname = shift;
@@ -728,6 +809,15 @@ sub save_sync_database {
     YAML::DumpFile( $SYNC_DATABASE, $syncdb );
 }
 
+=head2 get_server_differences $sync_database
+
+This method compares the given sync database to the current application
+database (fetched via the API interface), and returns a L<SyncmL::Engine::ServerDiff>
+object representing this.  (This object is essentially a struct with fields
+C<changed>, C<unchanged>, C<dead>, and C<future>.)
+
+=cut
+
 sub get_server_differences {
     my $self = shift;
     my $sync_db = shift;
@@ -735,16 +825,11 @@ sub get_server_differences {
     $self->original_synced_state($sync_db);
     my $app_db = $self->api->get_application_database();
 
-  # go through app db put things in either unchanged changed or future
+  # go through app db; put things in either unchanged changed or future
   # depending on existence in sync db and timestamp; delete from sync db while
   # going on
   #
   # put the rest of sync db in dead
-  #
-  # but what should the contents of these fields be?  well, we'll still need
-  # LUID but won't need last-mod, so obviously they should be SyncDBEntrys
-  #
-  # so maybe actually what needs to be done is:
 
     my $diff = SyncML::Engine::ServerDiff->new;
 

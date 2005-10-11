@@ -283,8 +283,14 @@ __PACKAGE__->mk_accessors(
         basic_authentication/
 );
 
-# Checks to make sure that we've sent a status response to all of the commands
-# in the message.
+=head2 sent_all_status
+
+Returns whether 
+we've sent a status response to all of the commands
+in the message.
+
+=cut
+
 sub sent_all_status {
     my $self = shift;
     return unless $self->response_status_for_header;
@@ -298,7 +304,7 @@ sub sent_all_status {
 
 =head2 commands_named $name, [$name ...]
 
-Returns all of the commands contain in the message (at the top level!) whose name
+Returns all of the commands contained in the message (at the top level!) whose name
 is one of the specified names.
 
 =cut
