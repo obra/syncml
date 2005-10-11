@@ -10,7 +10,6 @@ use SyncML::Message;
 use SyncML::Message::Command;
 use SyncML::SyncableItem;
 use SyncML::SyncDBEntry;
-use SyncML::ApplicationInterface;
 use Digest::MD5;
 use MIME::Base64 ();
 use YAML         ();
@@ -53,7 +52,10 @@ my $PACKAGE_HANDLERS = {
 
 sub new {
     my $class = shift;
+    my $api   = shift;
     my $self  = bless {}, $class;
+
+    $self->api($api);
 
     $self->last_message_id(0);
     $self->anchor(0);
@@ -102,7 +104,7 @@ sub respond_to_message {
         for my $command (@{ $self->in_message->commands }) {
             $self->add_status_for_command($command)->status_code(401);
         } 
-    } elsif (my $user = SyncML::ApplicationInterface::authenticated($in_message->basic_authentication)) {
+    } elsif (my $user = $self->api->authenticated($in_message->basic_authentication)) {
         $self->authenticated_user($user);
 
         $self->add_status_for_header(200);
@@ -413,7 +415,7 @@ sub handle_client_sync {
           $syncable_item->type( $client_syncdb_entry->type );
           $syncable_item->application_identifier( $client_syncdb_entry->application_identifier );
           $syncable_item->last_modified_as_seconds( time );
-          my $ok = SyncML::ApplicationInterface::update_item($server_db, $syncable_item);
+          my $ok = $self->api->update_item($server_db, $syncable_item);
 
           # XXX: should translate this into an actual Status failure to the
           # client.  And not just ignore it.
@@ -426,7 +428,7 @@ sub handle_client_sync {
             # We should, too. So we ask the app to delete it, and we don't put
             # it into synced_state. 
             
-            my $ok = SyncML::ApplicationInterface::delete_item($server_db, 
+            my $ok = $self->api->delete_item($server_db, 
                     $server_syncdb_entry->application_identifier);
 
             # XXX: should translate this into an actual Status failure to the
@@ -516,7 +518,7 @@ sub handle_client_sync {
                 $syncable_item->type( $client_syncdb_entry->type );
                 $syncable_item->application_identifier( $client_syncdb_entry->application_identifier );
                 $syncable_item->last_modified_as_seconds( time );
-                my $ok = SyncML::ApplicationInterface::update_item($server_db, $syncable_item);
+                my $ok = $self->api->update_item($server_db, $syncable_item);
 
                 # XXX: should translate this into an actual Status failure to
                 # the client.  And not just ignore it.
@@ -543,7 +545,7 @@ sub handle_client_sync {
         $syncable_item->content( $client_syncdb_entry->content );
         $syncable_item->type( $client_syncdb_entry->type );
         $syncable_item->last_modified_as_seconds( time );
-        my($ok, $application_id) = SyncML::ApplicationInterface::add_item($server_db, $syncable_item);
+        my($ok, $application_id) = $self->api->add_item($server_db, $syncable_item);
 
         # XXX: should translate this into an actual Status failure to
         # the client.  And not just ignore it.
@@ -675,7 +677,7 @@ sub get_server_differences {
     my $sync_db = shift;
 
     $self->original_synced_state($sync_db);
-    my $app_db = SyncML::ApplicationInterface::get_application_database();
+    my $app_db = $self->api->get_application_database();
 
   # go through app db put things in either unchanged changed or future
   # depending on existence in sync db and timestamp; delete from sync db while
@@ -743,7 +745,7 @@ __PACKAGE__->mk_accessors(
 
 	current_package
 
-    authenticated_user device_uri
+    authenticated_user device_uri api
 
         my_last_anchor client_last_anchor last_sync_seconds
 

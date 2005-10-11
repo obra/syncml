@@ -68,7 +68,7 @@ sub handle_request {
     }
 
     unless ($engine) {
-        $engine = SyncML::Engine->new;
+        $engine = SyncML::Engine->new($self->api);
         $engine->uri_base( "http://" . hostip . ":8080/" );
         $self->engines->{ $engine->internal_session_id } = $engine;
     }
@@ -108,6 +108,8 @@ sub print_banner {
         . hostip
         . ":8080/\n";
 }
+
+__PACKAGE__->mk_accessors(qw/api/);
 
 =head1 DIAGNOSTICS
 

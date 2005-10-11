@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-package SyncML::ApplicationInterface;
+package SyncML::API::YAML;
 use String::Koremutake;
 
 # This is pretty damn prototypy
@@ -16,8 +16,10 @@ use YAML         ();
 my $APPLICATION_DATABASE = "eg/database";
 my $APPLICATION_AUTH_DATABASE = "eg/app_auth_db";
 
+sub new { bless {}, shift } 
 
 sub authenticated {
+    my $self = shift;
     my $user_password = shift;
     
     return unless defined $user_password;
@@ -36,6 +38,7 @@ sub authenticated {
 }
 
 sub get_application_database {
+    my $self = shift;
     my $db   = YAML::LoadFile($APPLICATION_DATABASE);
 
     for my $app_id ( keys %$db ) {
@@ -58,6 +61,7 @@ sub get_application_database {
 }
 
 sub _save_application_database {
+    my $self = shift;
     my $db   = shift;
 
     my $outdb = {};
@@ -78,30 +82,33 @@ sub _save_application_database {
 # client modified it (and the client's mods thus win) -- so this can be called
 # on a deleted item!
 sub update_item {
+    my $self = shift;
     my $dbname = shift; # ignored for now
     my $syncable_item = shift;
 
-    my $db = get_application_database();
+    my $db = $self->get_application_database();
     $db->{ $syncable_item->application_identifier } = $syncable_item;
-    _save_application_database($db);
+    $self->_save_application_database($db);
     return 1;
 } 
 
 sub delete_item {
+    my $self = shift;
     my $dbname = shift; # ignored for now
     my $application_identifier = shift;
 
-    my $db = get_application_database();
+    my $db = $self->get_application_database();
     delete $db->{ $application_identifier };
-    _save_application_database($db);
+    $self->_save_application_database($db);
     return 1;
 }
 
 sub add_item {
+    my $self = shift;
     my $dbname = shift; # ignored for now
     my $syncable_item = shift;
 
-    my $db = get_application_database();
+    my $db = $self->get_application_database();
 
     my $k = String::Koremutake->new;
     my $app_id;
@@ -113,7 +120,7 @@ sub add_item {
 
     $syncable_item->application_identifier($app_id);
     $db->{$app_id} = $syncable_item;
-    _save_application_database($db);
+    $self->_save_application_database($db);
     return (1, $app_id);
 }
 
