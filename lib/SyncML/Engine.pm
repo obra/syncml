@@ -520,7 +520,7 @@ sub handle_client_sync {
           $syncable_item->type( $client_syncdb_entry->type );
           $syncable_item->application_identifier( $client_syncdb_entry->application_identifier );
           $syncable_item->last_modified_as_seconds( time );
-          my $ok = $self->api->update_item($server_db, $syncable_item);
+          my $ok = $self->api->update_item($server_db, $syncable_item, $self->authenticated_user);
 
           # XXX: should translate this into an actual Status failure to the
           # client.  And not just ignore it.
@@ -534,7 +534,7 @@ sub handle_client_sync {
             # it into synced_state. 
             
             my $ok = $self->api->delete_item($server_db, 
-                    $server_syncdb_entry->application_identifier);
+                    $server_syncdb_entry->application_identifier, $self->authenticated_user);
 
             # XXX: should translate this into an actual Status failure to the
             # client.  And not just ignore it.
@@ -623,7 +623,7 @@ sub handle_client_sync {
                 $syncable_item->type( $client_syncdb_entry->type );
                 $syncable_item->application_identifier( $client_syncdb_entry->application_identifier );
                 $syncable_item->last_modified_as_seconds( time );
-                my $ok = $self->api->update_item($server_db, $syncable_item);
+                my $ok = $self->api->update_item($server_db, $syncable_item, $self->authenticated_user);
 
                 # XXX: should translate this into an actual Status failure to
                 # the client.  And not just ignore it.
@@ -650,7 +650,7 @@ sub handle_client_sync {
         $syncable_item->content( $client_syncdb_entry->content );
         $syncable_item->type( $client_syncdb_entry->type );
         $syncable_item->last_modified_as_seconds( time );
-        my($ok, $application_id) = $self->api->add_item($server_db, $syncable_item);
+        my($ok, $application_id) = $self->api->add_item($server_db, $syncable_item, $self->authenticated_user);
 
         # XXX: should translate this into an actual Status failure to
         # the client.  And not just ignore it.
@@ -823,7 +823,7 @@ sub get_server_differences {
     my $sync_db = shift;
 
     $self->original_synced_state($sync_db);
-    my $app_db = $self->api->get_application_database($self->authorized_user);
+    my $app_db = $self->api->get_application_database($self->authenticated_user);
 
   # go through app db; put things in either unchanged changed or future
   # depending on existence in sync db and timestamp; delete from sync db while

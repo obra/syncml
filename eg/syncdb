@@ -4,6 +4,20 @@ Syncer:
     893B3206020404217800:
       tasks:
         client_last_anchor: ~
-        db: {}
-        last_sync_seconds: 1129058570
+        db:
+          167778129:
+            application_identifier: 4
+            content: |-
+              BEGIN:VCALENDAR
+              VERSION:1.0
+              BEGIN:VTODO
+              SUMMARY:From pocket 
+              DESCRIPTION:
+              CLASS:PUBLIC
+              PRIORITY:2
+              STATUS:NEEDS ACTION
+              END:VTODO
+              END:VCALENDAR
+            type: text/x-vcalendar
+        last_sync_seconds: 1129065378
         my_last_anchor: ~

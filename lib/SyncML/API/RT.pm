@@ -16,6 +16,8 @@ use RT;
 RT::LoadConfig();
 RT::Init();
 
+use base qw/SyncML::Log/;
+
 sub new { bless {}, shift } 
 
 sub authenticated {
@@ -43,15 +45,22 @@ sub _get_rt_current_user {
     return $cu;
 } 
 
+sub _get_queue {
+    my $self = shift;
+    my $cu = shift;
+    my $q = RT::Queue->new($cu);
+    $q->LoadByCols(Name => "General");
+    return $q;
+} 
+
 sub get_application_database {
     my $self = shift;
     my $username = shift;
 
     my $db = {};
-
     my $cu = $self->_get_rt_current_user($username);
     my $tickets = RT::Tickets->new($cu);
-    $tickets->LimitOwner(VALUE => $cu->id);
+    $tickets->LimitOwner(VALUE => $cu->Id);
 
     while (my $ticket = $tickets->Next) {
         my $ic = Data::ICal->new;
@@ -90,37 +99,46 @@ return 1;
 } 
 
 sub delete_item {
-return 1;
     my $self = shift;
     my $dbname = shift; # ignored for now
     my $application_identifier = shift;
+    my $username = shift;
 
-    my $db = $self->get_application_database();
-    delete $db->{ $application_identifier };
-    $self->_save_application_database($db);
-    return 1;
+    my $cu = $self->_get_rt_current_user($username);
+
+    my $ticket = RT::Ticket->new($cu);
+    $ticket->Load($application_identifier);
+
+    unless ($cu->Id) {
+        $self->log->warn("Failed to load ticket '$application_identifier'");
+        return;
+    } 
+
+    my ($ok, $msg) = $ticket->Delete;
+
+    return $ok ? 1 : 0;
 }
 
 sub add_item {
-return (1, 200);
     my $self = shift;
     my $dbname = shift; # ignored for now
     my $syncable_item = shift;
+    my $username = shift;
 
-    my $db = $self->get_application_database();
+    my $cu = $self->_get_rt_current_user($username);
+    my $q = $self->_get_queue($cu);
 
-    my $k = String::Koremutake->new;
-    my $app_id;
-    FIND_APP_ID:
-    while (1) {
-        $app_id = $k->integer_to_koremutake(int rand(2_000_000));
-        last FIND_APP_ID if !defined $db->{$app_id};
-    } 
+    my $ic = $syncable_item->content_as_object;
 
-    $syncable_item->application_identifier($app_id);
-    $db->{$app_id} = $syncable_item;
-    $self->_save_application_database($db);
-    return (1, $app_id);
+    my $ticket = RT::Ticket->new($cu);
+    $ticket->Create( Queue => $q->id, 
+        Subject => $ic->entries->[0]->property("summary")->[0]->value,
+        Owner => $cu->Id);
+    # Put in LastUpdated too?
+
+    my $id = $ticket->Id;
+
+    return ($id != 0, $id);
 }
 
 1;

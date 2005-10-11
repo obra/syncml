@@ -115,6 +115,25 @@ sub print_banner {
         hostip, ":8080/");
 }
 
+=head2 handler
+
+Handler implemented as part of HTTP::Server::Simple API; overrides CGI's
+to log better.
+
+=cut
+
+sub handler {
+    my $self = shift;
+    my $cgi  = new CGI();
+    eval { $self->handle_request($cgi) };
+    if ($@) {
+        my $error = $@;
+        $self->log->error($error);
+    }
+}
+
+1;
+
 __PACKAGE__->mk_accessors(qw/api/);
 
 =head1 DIAGNOSTICS
