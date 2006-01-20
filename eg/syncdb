@@ -19,20 +19,6 @@ Syncer:
               END:VTODO
               END:VCALENDAR
             type: text/x-vcalendar
-          151001325:
-            application_identifier: 2
-            content: |-
-              BEGIN:VCALENDAR
-              VERSION:1.0
-              BEGIN:VTODO
-              SUMMARY:From ipaq
-              DESCRIPTION:
-              CLASS:PUBLIC
-              PRIORITY:2
-              STATUS:NEEDS ACTION
-              END:VTODO
-              END:VCALENDAR
-            type: text/x-vcalendar
           151001337:
             application_identifier: 3
             content: |-
@@ -75,5 +61,19 @@ Syncer:
               END:VTODO
               END:VCALENDAR
             type: text/x-vcalendar
-        last_sync_seconds: 1137787403
+          83892001:
+            application_identifier: 8
+            content: |-
+              BEGIN:VCALENDAR
+              VERSION:1.0
+              BEGIN:VTODO
+              SUMMARY:this should not sync because of its status
+              DESCRIPTION:
+              CLASS:PUBLIC
+              PRIORITY:2
+              STATUS:NEEDS ACTION
+              END:VTODO
+              END:VCALENDAR
+            type: text/x-vcalendar
+        last_sync_seconds: 1137788282
         my_last_anchor: ~

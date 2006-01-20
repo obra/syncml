@@ -119,7 +119,7 @@ sub delete_item {
         return;
     } 
 
-    my ($ok, $msg) = $ticket->Delete;
+    my ($ok, $msg) = $ticket->Reject;
 
     return $ok ? 1 : 0;
 }
