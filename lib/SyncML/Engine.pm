@@ -91,6 +91,8 @@ sub respond_to_message {
     my $self       = shift;
     my $in_message = shift;
 
+    $self->log->info("Responding to message in package ", $self->current_package);
+
     my $out_message = SyncML::Message->new;
 
     $self->in_message($in_message);

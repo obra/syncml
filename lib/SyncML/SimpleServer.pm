@@ -64,18 +64,26 @@ sub handle_request {
    # CGI, except that CGI.pm is mean and won't parse the query string if
    # there's posted data.
     if ( $ENV{'QUERY_STRING'} =~ /^sid=([0-9a-f]+)/ ) {
-        $engine = $self->engines->{$1};
+        $self->log->info("looking for engine for $1");
+        $engine = $self->engine_cache->get($1);
+        # XXX Arguably, this should temporarily erase the engine from the cache
+        # so that no other request tries to use it too?
+        $self->log->warn("couldn't find engine for $1") unless $engine;
+
     }
 
     unless ($engine) {
         $engine = SyncML::Engine->new($self->api);
         $engine->uri_base( "http://" . hostip . ":8080/" );
-        $self->engines->{ $engine->internal_session_id } = $engine;
     }
 
     my $out_message = $engine->respond_to_message($in_message);
 
-    delete $self->engines->{ $engine->internal_session_id } if $engine->done;
+    if ($engine->done) {
+        $self->engine_cache->remove( $engine->internal_session_id );
+    } else {
+        $self->engine_cache->set( $engine->internal_session_id, $engine);
+    }
 
     my $output = $out_message->as_xml;
     if ($using_wbxml) {    # warn $output;
@@ -90,16 +98,18 @@ sub handle_request {
     print $resp->as_string;
 }
 
-=head2 engines
+=head2 engine_cache
 
-Returns a hash reference of L<SyncML::Engine> objects, with
-C<internal_session_id> as the key.
+Returns a L<Cache::Cache> containing L<SyncML::Engine> objects, with
+C<internal_session_id> as keys.
 
 =cut
 
-sub engines {
+sub engine_cache {
     my $self = shift;
-    return $self->{'_syncml_engines'} ||= {};
+    use Cache::FileCache; # could switch this to any other Cache::Cache
+    return $self->{'_cache'} ||= 
+        Cache::FileCache->new( { namespace => "SyncML-Cache" });
 }
 
 =head2 print_banner
