@@ -15,6 +15,7 @@ use lib '/Users/glasser/BestPractical/rt-3.5/lib';
 use RT;
 RT::LoadConfig();
 RT::Init();
+require SyncML::API::RT::Config;
 
 use base qw/SyncML::Log/;
 
@@ -45,11 +46,12 @@ sub _get_rt_current_user {
     return $cu;
 } 
 
+# Loads the RT::Queue that items added on the client get added to.
 sub _get_queue {
     my $self = shift;
     my $cu = shift;
     my $q = RT::Queue->new($cu);
-    $q->LoadByCols(Name => "General");
+    $q->LoadByCols(Name => $SyncML::API::RT::Config::DefaultSyncQueue);
     return $q;
 } 
 
@@ -60,7 +62,8 @@ sub get_application_database {
     my $db = {};
     my $cu = $self->_get_rt_current_user($username);
     my $tickets = RT::Tickets->new($cu);
-    $tickets->LimitOwner(VALUE => $cu->Id);
+    my $user_id = $cu->Id;
+    $tickets->FromSQL(qq{Owner = '$user_id' AND ( Status = 'new' OR Status = 'open')});
 
     while (my $ticket = $tickets->Next) {
         my $ic = Data::ICal->new;
@@ -68,6 +71,8 @@ sub get_application_database {
         my $todo = Data::ICal::Entry::Todo->new;
         $ic->add_entry($todo);
         $todo->add_properties( summary => $ticket->Subject );
+
+        $self->log->info("DB contains ticket: ", $ticket->Subject);
 
         my $syncitem = SyncML::SyncableItem->new;
         $syncitem->application_identifier($ticket->Id);
