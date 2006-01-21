@@ -360,6 +360,8 @@ sub handle_client_data_status_and_mapping {
         $self->handle_client_map($map, $status);
     } 
 
+    $self->run_deferred_operations;
+
     $self->last_sync_seconds(time);
 
     for my $server_db (keys %{ $self->synced_states }) {
@@ -431,8 +433,8 @@ adds a response Sync to the client which updates it to what it should have.
 This method uses the client's command to figure out what the client has
 and what the server needs to do to update it.
 
-This can update_item, delete_item, and add_item on the API object. Perhaps
-this is wrong as it can break failure atomicity?
+This can call update_item, delete_item, and add_item on the API object in "just checking
+mode", and if they say that all is OK it stores the "real" operations to be done after package 5.
 
 It also sets up the synced_states and waiting_for_map structures, representing
 the current understanding of the sync database and the sync db entries added
@@ -652,20 +654,43 @@ sub handle_client_sync {
         $syncable_item->content( $client_syncdb_entry->content );
         $syncable_item->type( $client_syncdb_entry->type );
         $syncable_item->last_modified_as_seconds( time );
-        my($ok, $application_id) = $self->api->add_item($server_db, $syncable_item, $self->authenticated_user);
+        my($ok, $dummy_application_id) = $self->api->add_item($server_db, $syncable_item, $self->authenticated_user, 1);
 
-        # XXX: should translate this into an actual Status failure to
-        # the client.  And not just ignore it.
-        $self->log->error("XXX: application failed to add an item: $ok") unless $ok;
+        if ($ok) {
+            $self->add_deferred_operation(deferred_add_item => 
+                server_db => $server_db, syncable_item => $syncable_item, authenticated_user => $self->authenticated_user,
+                client_identifier => $client_id);
+        } else {
+            # XXX: should translate this into an actual Status failure to
+            # the client.  And not just ignore it.
+            $self->log->error("XXX: application item add ACL check failed: $ok");
+        }
 
-        $client_syncdb_entry->application_identifier($application_id);
-        
         $synced_state->{$client_id} = $client_syncdb_entry;
     }
 
     $self->synced_states->{$server_db} = $synced_state;
     $self->waiting_for_maps->{$server_db} = $waiting_for_map;
 }
+
+sub deferred_add_item {
+    my $self = shift;
+    my %args = (
+        server_db => undef,
+        syncable_item => undef,
+        authenticated_user => undef,
+        client_identifier => undef,
+        @_);
+
+    my ($ok, $app_id) = $self->api->add_item($args{server_db}, $args{syncable_item}, $args{authenticated_user});
+    
+    if ($ok) {
+        $self->synced_states->{$server_db}{$client_id}->application_identifier($app_id);
+    } else {
+        # XXX Not even sure how the spec ould expect this to be transmitted to the client.
+        $self->log->error("XXX: application failed to add an item: $ok");
+    } 
+} 
 
 =head2 handle_get $get_in, $status_out
 
@@ -878,6 +903,48 @@ sub get_server_differences {
     return $diff;
 }
 
+=head2 add_deferred_operation $method_name, @ARGS
+
+Some of the applications update operations are specified in Package 3 by the client, but should
+not actually take effect until the sync is fully completed in Package 5.  This operation adds
+a "deferred operation" to the engine; deferred operations can be run with C<run_deferred_operations>.
+The operation is specified just as a method name followed by a list of arguments; the arguments should
+avoid code references and other things that are unlikely to deal well with serialization.
+
+=cut
+
+sub add_deferred_operation {
+    my $self = shift;
+
+    my $method_name = shift;
+
+    $self->deferred_operations([]) unless $self->deferred_operations;
+
+    push @{ $self->deferred_operations }, [ $method_name => @_ ];
+} 
+
+=head2 run_deferred_operations
+
+Runs any deferred operations that have been added with C<add_deferred_operations>;
+clears the current list of operations.
+
+=cut
+
+sub run_deferred_operations {
+    my $self = shift;
+
+    return unless $self->deferred_operations;
+
+    my @ops = @{ $self->deferred_operations };
+    $self->deferred_operations([]);
+
+    for my $op (@ops) {
+        my($method_name, @args) = @$op;
+
+        $self->$method_name(@args);
+    } 
+} 
+
 # current_package has legal values 1, 3, or 5 -- represents the current package
 # that we're responding to. 1 is client initialization, 3 is client changes, 5
 # is mapping.
@@ -894,7 +961,10 @@ __PACKAGE__->mk_accessors(
 
         unchanged dead future changed original_synced_state
         
-        synced_states waiting_for_maps/
+        synced_states waiting_for_maps
+        
+        deferred_operations
+        /
 );
 
 # note that unchanged and changed and dead are hashes of SyncDBEntrys, whereas

@@ -71,6 +71,8 @@ sub get_application_database {
         my $todo = Data::ICal::Entry::Todo->new;
         $ic->add_entry($todo);
         $todo->add_properties( summary => $ticket->Subject );
+        $todo->add_properties( description => 
+            qq{From queue: @{[ $ticket->QueueObj->Name ]}; Status: @{[ $ticket->Status ]}});
 
         $self->log->info("DB contains ticket: ", $ticket->Subject);
 
@@ -108,6 +110,7 @@ sub delete_item {
     my $dbname = shift; # ignored for now
     my $application_identifier = shift;
     my $username = shift;
+    my $just_checking = shift;
 
     my $cu = $self->_get_rt_current_user($username);
 
@@ -118,8 +121,13 @@ sub delete_item {
         $self->log->warn("Failed to load ticket '$application_identifier'");
         return;
     } 
-
-    my ($ok, $msg) = $ticket->Reject;
+    
+    my ($ok, $msg);
+    if ($just_checking) {
+        $ok = $ticket->CurrentUserHasRight('ModifyTicket');
+    } else {
+        ($ok, $msg) = $ticket->Reject;
+    }
 
     return $ok ? 1 : 0;
 }
@@ -129,21 +137,28 @@ sub add_item {
     my $dbname = shift; # ignored for now
     my $syncable_item = shift;
     my $username = shift;
+    my $just_checking = shift;
 
     my $cu = $self->_get_rt_current_user($username);
     my $q = $self->_get_queue($cu);
 
     my $ic = $syncable_item->content_as_object;
 
-    my $ticket = RT::Ticket->new($cu);
-    $ticket->Create( Queue => $q->id, 
-        Subject => $ic->entries->[0]->property("summary")->[0]->value,
-        Owner => $cu->Id);
-    # Put in LastUpdated too?
+    my ($ok, $application_id);
+    if ($just_checking) {
+        $ok = $cu->HasRight(Right => 'CreateTicket', Object => $q) and
+              $cu->HasRight(Right => 'OwnTicket',    Object => $q);
+    } else {
+        my $ticket = RT::Ticket->new($cu);
+        $ticket->Create( Queue => $q->id, 
+            Subject => $ic->entries->[0]->property("summary")->[0]->value,
+            Owner => $cu->Id);
+        # Put in LastUpdated too?
+        $application_id = $ticket->Id;
+        $ok = $application_id != 0;
+    }
 
-    my $id = $ticket->Id;
-
-    return ($id != 0, $id);
+    return ($ok, $application_id);
 }
 
 1;
