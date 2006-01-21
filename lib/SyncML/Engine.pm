@@ -533,16 +533,22 @@ sub handle_client_sync {
           $synced_state->{$client_id} = $client_syncdb_entry;
         } else {
 
-            # We have it, client doesn't.  Clearly the client deleted it.
-            # We should, too. So we ask the app to delete it, and we don't put
-            # it into synced_state. 
+            # We have it, client doesn't.  We assume the client deleted it.
+            # We should, too. So we don't put it into synced_state, and we make
+            # sure the app can delete it (deferring the actual deletion until package 5). 
             
             my $ok = $self->api->delete_item($server_db, 
-                    $server_syncdb_entry->application_identifier, $self->authenticated_user);
+                    $server_syncdb_entry->application_identifier, $self->authenticated_user, 1);
 
-            # XXX: should translate this into an actual Status failure to the
-            # client.  And not just ignore it.
-            $self->log->error("XXX: application failed to delete an item: $ok") unless $ok;
+            if ($ok) {
+                $self->add_deferred_operation(deferred_delete_item => 
+                    server_db => $server_db, application_identifier => $server_syncdb_entry->application_identifier, 
+                    authenticated_user => $self->authenticated_user);
+            } else {
+                # XXX: should translate this into an actual Status failure to the
+                # client.  And not just ignore it.
+                $self->log->error("XXX: application failed to delete an item: $ok");
+            }
         }
     }
 
@@ -673,6 +679,12 @@ sub handle_client_sync {
     $self->waiting_for_maps->{$server_db} = $waiting_for_map;
 }
 
+=head2 deferred_add_item
+
+The deferred operation to add an item to the application database and register it in the sync database.
+
+=cut
+
 sub deferred_add_item {
     my $self = shift;
     my %args = (
@@ -689,6 +701,28 @@ sub deferred_add_item {
     } else {
         # XXX Not even sure how the spec could expect this to be transmitted to the client.
         $self->log->error("XXX: application failed to add an item: $ok");
+    } 
+} 
+
+=head2 deferred_delete_item
+
+The deferred operation to delete an item from the application database.
+
+=cut
+
+sub deferred_delete_item {
+    my $self = shift;
+    my %args = (
+        server_db => undef,
+        application_identifier => undef,
+        authenticated_user => undef,
+        @_);
+
+    my $ok = $self->api->delete_item($args{server_db}, $args{application_identifier}, $args{authenticated_user});
+    
+    unless ($ok) {
+        # XXX Not even sure how the spec could expect this to be transmitted to the client.
+        $self->log->error("XXX: application failed to delete an item: $ok");
     } 
 } 
 
