@@ -685,9 +685,9 @@ sub deferred_add_item {
     my ($ok, $app_id) = $self->api->add_item($args{server_db}, $args{syncable_item}, $args{authenticated_user});
     
     if ($ok) {
-        $self->synced_states->{$server_db}{$client_id}->application_identifier($app_id);
+        $self->synced_states->{$args{server_db}}{$args{client_identifier}}->application_identifier($app_id);
     } else {
-        # XXX Not even sure how the spec ould expect this to be transmitted to the client.
+        # XXX Not even sure how the spec could expect this to be transmitted to the client.
         $self->log->error("XXX: application failed to add an item: $ok");
     } 
 } 

@@ -7,13 +7,31 @@ Syncer:
         db:
           100669675:
             application_identifier: 13
-            content: |
+            content: |-
               BEGIN:VCALENDAR
-              PRODID:Data::ICal 0.03
               VERSION:1.0
               BEGIN:VTODO
-              DESCRIPTION:From queue: Awesome; Status: new
               SUMMARY:adding
+              DESCRIPTION;ENCODING=QUOTED-PRINTABLE:From queue: Awesome; Status: =
+              new=0D=0A=
+              
+              CLASS:PUBLIC
+              PRIORITY:2
+              STATUS:NEEDS ACTION
+              END:VTODO
+              END:VCALENDAR
+            type: text/x-vcalendar
+          33560368:
+            application_identifier: 14
+            content: |-
+              BEGIN:VCALENDAR
+              VERSION:1.0
+              BEGIN:VTODO
+              SUMMARY:N3w bbut deferred 
+              DESCRIPTION:
+              CLASS:PUBLIC
+              PRIORITY:2
+              STATUS:NEEDS ACTION
               END:VTODO
               END:VCALENDAR
             type: text/x-vcalendar
@@ -33,5 +51,5 @@ Syncer:
               END:VTODO
               END:VCALENDAR
             type: text/x-vcalendar
-        last_sync_seconds: 1137791323
+        last_sync_seconds: 1137869036
         my_last_anchor: ~
