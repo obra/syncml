@@ -524,19 +524,26 @@ sub handle_client_sync {
           $syncable_item->type( $client_syncdb_entry->type );
           $syncable_item->application_identifier( $client_syncdb_entry->application_identifier );
           $syncable_item->last_modified_as_seconds( time );
-          my $ok = $self->api->update_item($server_db, $syncable_item, $self->authenticated_user, 1);
+          my $ret = $self->api->update_item($server_db, $syncable_item, $self->authenticated_user, 1);
 
-          if ($ok) {
+          if ($ret->ok) {
               $self->add_deferred_operation(deferred_update_item =>
                 server_db => $server_db, syncable_item => $syncable_item, 
                 authenticated_user => $self->authenticated_user);
+              
+              # Did the application decide that this update actually means that the client should delete
+              # this item?
+              if ($ret->delete_this) {
+                $self->push_delete_command($sync_out, $client_id);
+              } else {
+                # No, it didn't: so save it to the synced state
+                $synced_state->{$client_id} = $client_syncdb_entry;
+              } 
           } else {
               # XXX: should translate this into an actual Status failure to
               # the client.  And not just ignore it.
-              $self->log->error("XXX: application failed to check ACL for updating an item: $ok");
+              $self->log->error("XXX: application failed to check ACL for updating an item");
           }
-
-          $synced_state->{$client_id} = $client_syncdb_entry;
         } else {
 
             # We have it, client doesn't.  We assume the client deleted it.
@@ -618,13 +625,9 @@ sub handle_client_sync {
 
               # The client hasn't changed it, but we've deleted it.  Send them
               # a delete command.
-                my $delete = SyncML::Message::Command::Delete->new;
-                $self->out_message->stamp_command_id($delete);
-                $delete->client_identifier($client_id);
+              $self->push_delete_command($sync_out, $client_id);
 
-                push @{ $sync_out->subcommands }, $delete;
-
-                # Don't save anything to synced_state.
+              # Don't save anything to synced_state.
             } else {
 
                 # The client changed it.  Just forget about our attempt at
@@ -691,6 +694,25 @@ sub handle_client_sync {
     $self->waiting_for_maps->{$server_db} = $waiting_for_map;
 }
 
+=head2 push_delete_command $sync_command, $client_id
+
+Given an (outgoing) L<SyncML::Message::Command::Sync> and a client id, adds
+a L<SyncML::Message::Command::Delete> to it for that client ID.
+
+=cut
+
+sub push_delete_command {
+    my $self = shift;
+    my $sync_out = shift;
+    my $client_id = shift;
+
+    my $delete = SyncML::Message::Command::Delete->new;
+    $self->out_message->stamp_command_id($delete);
+    $delete->client_identifier($client_id);
+
+    push @{ $sync_out->subcommands }, $delete;
+}
+
 =head2 deferred_add_item
 
 The deferred operation to add an item to the application database and register it in the sync database.
@@ -752,11 +774,11 @@ sub deferred_update_item {
         authenticated_user => undef,
         @_);
 
-    my $ok = $self->api->update_item($args{server_db}, $args{syncable_item}, $args{authenticated_user});
+    my $ret = $self->api->update_item($args{server_db}, $args{syncable_item}, $args{authenticated_user});
     
-    unless ($ok) {
+    unless ($ret->ok) {
         # XXX Not even sure how the spec could expect this to be transmitted to the client.
-        $self->log->error("XXX: application failed to update an item: $ok");
+        $self->log->error("XXX: application failed to update an item");
     } 
 } 
 

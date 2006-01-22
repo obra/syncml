@@ -14,6 +14,7 @@ package SyncML::API::RT;
 require SyncML::API::RT::Config;
 
 use DateTime;
+use SyncML::APIReturn;
 
 use base qw/SyncML::Log/;
 
@@ -104,7 +105,10 @@ sub update_item {
     my $ic = $syncable_item->content_as_object;
     my $status = $ic->entries->[0]->property("status")->[0]->value;
 
-    return 1 unless $status eq 'COMPLETED';
+    my $ret = SyncML::APIReturn->new;
+    $ret->ok(1);
+
+    return $ret unless $status eq 'COMPLETED';
 
     # They're trying to check off an item; we need to set it to resolved.
 
@@ -115,9 +119,10 @@ sub update_item {
 
     unless ($ticket->Id) {
         $self->log->warn("Failed to load ticket '", $syncable_item->application_identifier, "'");
-        return;
+        $ret->ok(0);
+        return $ret;
     } 
-    
+   
     my ($ok, $msg);
     if ($just_checking) {
         $ok = $ticket->CurrentUserHasRight('ModifyTicket');
@@ -125,7 +130,10 @@ sub update_item {
         ($ok, $msg) = $ticket->Resolve;
     }
 
-    return $ok ? 1 : 0;
+    $ret->ok($ok);
+    $ret->delete_this(1) if $ok;
+
+    return $ret;
 } 
 
 sub delete_item {
