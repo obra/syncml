@@ -1,7 +1,6 @@
 <%once>
 use SyncML::Engine;
 use SyncML::Message;
-use Sys::HostIP; # really should be something more RT-ish
 use XML::WBXML;
 use SyncML::Log;
 use SyncML::API::RT;
@@ -37,7 +36,7 @@ if ($engine_id) {
 
 unless ($engine) {
     $engine = SyncML::Engine->new( SyncML::API::RT->new );
-    $engine->uri_base( "http://" . hostip . ":8000/SyncML/"); # XXX use real RT vars
+    $engine->uri_base( $RT::WebURL . "/SyncML/"); 
 } 
 
 my $out_message = $engine->respond_to_message($in_message);
