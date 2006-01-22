@@ -524,11 +524,17 @@ sub handle_client_sync {
           $syncable_item->type( $client_syncdb_entry->type );
           $syncable_item->application_identifier( $client_syncdb_entry->application_identifier );
           $syncable_item->last_modified_as_seconds( time );
-          my $ok = $self->api->update_item($server_db, $syncable_item, $self->authenticated_user);
+          my $ok = $self->api->update_item($server_db, $syncable_item, $self->authenticated_user, 1);
 
-          # XXX: should translate this into an actual Status failure to the
-          # client.  And not just ignore it.
-          $self->log->error("XXX: application failed to update an item: $ok") unless $ok;
+          if ($ok) {
+              $self->add_deferred_operation(deferred_update_item =>
+                server_db => $server_db, syncable_item => $syncable_item, 
+                authenticated_user => $self->authenticated_user);
+          } else {
+              # XXX: should translate this into an actual Status failure to
+              # the client.  And not just ignore it.
+              $self->log->error("XXX: application failed to check ACL for updating an item: $ok");
+          }
 
           $synced_state->{$client_id} = $client_syncdb_entry;
         } else {
@@ -633,11 +639,17 @@ sub handle_client_sync {
                 $syncable_item->type( $client_syncdb_entry->type );
                 $syncable_item->application_identifier( $client_syncdb_entry->application_identifier );
                 $syncable_item->last_modified_as_seconds( time );
-                my $ok = $self->api->update_item($server_db, $syncable_item, $self->authenticated_user);
+                my $ok = $self->api->update_item($server_db, $syncable_item, $self->authenticated_user, 1);
 
-                # XXX: should translate this into an actual Status failure to
-                # the client.  And not just ignore it.
-                $self->log->error("XXX: application failed to resurrect an item: $ok") unless $ok;
+                if ($ok) {
+                    $self->add_deferred_operation(deferred_update_item =>
+                        server_db => $server_db, syncable_item => $syncable_item, 
+                        authenticated_user => $self->authenticated_user);
+                } else {
+                    # XXX: should translate this into an actual Status failure to
+                    # the client.  And not just ignore it.
+                    $self->log->error("XXX: application failed to resurrect an item: $ok");
+                }
 
                 $synced_state->{$client_id} = $client_syncdb_entry;
             }
@@ -723,6 +735,28 @@ sub deferred_delete_item {
     unless ($ok) {
         # XXX Not even sure how the spec could expect this to be transmitted to the client.
         $self->log->error("XXX: application failed to delete an item: $ok");
+    } 
+} 
+
+=head2 deferred_update_item
+
+The deferred operation to update an item in the application database.
+
+=cut
+
+sub deferred_update_item {
+    my $self = shift;
+    my %args = (
+        server_db => undef,
+        syncable_item => undef,
+        authenticated_user => undef,
+        @_);
+
+    my $ok = $self->api->update_item($args{server_db}, $args{syncable_item}, $args{authenticated_user});
+    
+    unless ($ok) {
+        # XXX Not even sure how the spec could expect this to be transmitted to the client.
+        $self->log->error("XXX: application failed to update an item: $ok");
     } 
 } 
 

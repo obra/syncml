@@ -13,6 +13,8 @@ package SyncML::API::RT;
 
 require SyncML::API::RT::Config;
 
+use DateTime;
+
 use base qw/SyncML::Log/;
 
 sub new { bless {}, shift } 
@@ -61,6 +63,8 @@ sub get_application_database {
     my $user_id = $cu->Id;
     $tickets->FromSQL(qq{Owner = '$user_id' AND ( Status = 'new' OR Status = 'open')});
 
+    my $now = DateTime->now;
+
     while (my $ticket = $tickets->Next) {
         my $ic = Data::ICal->new;
         $ic->add_property( version => "1.0" );
@@ -68,7 +72,7 @@ sub get_application_database {
         $ic->add_entry($todo);
         $todo->add_properties( summary => $ticket->Subject );
         $todo->add_properties( description => 
-            qq{From queue: @{[ $ticket->QueueObj->Name ]}; Status: @{[ $ticket->Status ]}});
+            qq{Last thought about at @{[ $now->hms ]} From queue: @{[ $ticket->QueueObj->Name ]}; Status: @{[ $ticket->Status ]}});
 
         $self->log->info("DB contains ticket: ", $ticket->Subject);
 
@@ -90,15 +94,38 @@ sub get_application_database {
 # client modified it (and the client's mods thus win) -- so this can be called
 # on a deleted item!
 sub update_item {
-return 1;
     my $self = shift;
     my $dbname = shift; # ignored for now
     my $syncable_item = shift;
+    my $username = shift;
 
-    my $db = $self->get_application_database();
-    $db->{ $syncable_item->application_identifier } = $syncable_item;
-    $self->_save_application_database($db);
-    return 1;
+    my $just_checking = shift;
+
+    my $ic = $syncable_item->content_as_object;
+    my $status = $ic->entries->[0]->property("status")->[0]->value;
+
+    return 1 unless $status eq 'COMPLETED';
+
+    # They're trying to check off an item; we need to set it to resolved.
+
+    my $cu = $self->_get_rt_current_user($username);
+
+    my $ticket = RT::Ticket->new($cu);
+    $ticket->Load($syncable_item->application_identifier);
+
+    unless ($ticket->Id) {
+        $self->log->warn("Failed to load ticket '", $syncable_item->application_identifier, "'");
+        return;
+    } 
+    
+    my ($ok, $msg);
+    if ($just_checking) {
+        $ok = $ticket->CurrentUserHasRight('ModifyTicket');
+    } else {
+        ($ok, $msg) = $ticket->Resolve;
+    }
+
+    return $ok ? 1 : 0;
 } 
 
 sub delete_item {
@@ -113,7 +140,7 @@ sub delete_item {
     my $ticket = RT::Ticket->new($cu);
     $ticket->Load($application_identifier);
 
-    unless ($cu->Id) {
+    unless ($ticket->Id) {
         $self->log->warn("Failed to load ticket '$application_identifier'");
         return;
     } 
