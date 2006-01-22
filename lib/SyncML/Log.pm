@@ -35,7 +35,27 @@ sub log_init {
   my $class = shift;
   my $file = shift;
   Log::Log4perl->init_and_watch($file);
-} 
+}
+
+=head2 log_init_default
+
+(Class method.) Starts the L<Log::Log4perl> logger with some default values
+(display INFO and above to the screen).
+
+=cut
+
+sub log_init_default {
+    my $class = shift;
+    my %default = (
+        'log4perl.rootLogger'        => "ALL,Screen",
+        'log4perl.appender.Screen'   => 'Log::Log4perl::Appender::Screen',
+        'log4perl.appender.Screen.stderr' => 1,
+        'log4perl.appender.Screen.layout' =>
+            'Log::Log4perl::Layout::SimpleLayout'
+    );
+    Log::Log4perl->init( \%default );
+}
+
 
 =head2 log 
 
