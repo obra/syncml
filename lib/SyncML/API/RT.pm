@@ -11,10 +11,6 @@ package SyncML::API::RT;
 # use SyncableItems, not SyncDBEntrys -- the ApplicationInterface should be
 # unaware of client_identifiers
 
-use lib '/Users/glasser/BestPractical/rt-3.5/lib';
-use RT;
-RT::LoadConfig();
-RT::Init();
 require SyncML::API::RT::Config;
 
 use base qw/SyncML::Log/;
