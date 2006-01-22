@@ -1,0 +1,63 @@
+<%once>
+use SyncML::Engine;
+use SyncML::Message;
+use Sys::HostIP; # really should be something more RT-ish
+use XML::WBXML;
+use SyncML::Log;
+use SyncML::API::RT;
+use Cache::FileCache;
+SyncML::Log->log_init_default;
+</%once>
+<%init>
+my $log = Log::Log4perl->get_logger("SyncML dhandler");
+
+# Grab content type and posted data
+my $ct = $m->cgi_request->header_in("Content-Type");
+my $postdata  = $m->request_args->{POSTDATA};
+my $engine_id = $m->request_args->{sid};
+
+my $using_wbxml = $ct eq 'application/vnd.syncml+wbxml';
+
+my $input = $postdata;
+$input = XML::WBXML::wbxml_to_xml($input) if $using_wbxml;
+
+my $in_message = SyncML::Message->new;
+$in_message->from_xml($input);
+
+return unless $in_message;    # should do some sort of output I guess
+
+my $engine_cache = Cache::FileCache->new( { namespace => "SyncML-RT-Cache" });
+
+my $engine;
+if ($engine_id) {
+    $log->info("looking for engine for $engine_id");
+    $engine = $engine_cache->get($engine_id);
+    $log->warn("couldn't find engine for $engine_id") unless $engine;
+} 
+
+unless ($engine) {
+    $engine = SyncML::Engine->new( SyncML::API::RT->new );
+    $engine->uri_base( "http://" . hostip . ":8000/SyncML/"); # XXX use real RT vars
+} 
+
+my $out_message = $engine->respond_to_message($in_message);
+
+if ($engine->done) {
+    $engine_cache->remove( $engine->internal_session_id );
+} else {
+    $engine_cache->set( $engine->internal_session_id, $engine);
+}
+
+my $output = $out_message->as_xml;
+if ($using_wbxml) { 
+    $output = XML::WBXML::xml_to_wbxml($output);
+}
+
+$r->content_type(
+    'application/vnd.syncml+' . ( $using_wbxml ? 'wb' : '' ) . 'xml' );
+$r->header_out('Content-Length', length $output );
+
+print $output;
+$m->abort;
+
+</%init>
