@@ -64,8 +64,6 @@ sub get_application_database {
     my $user_id = $cu->Id;
     $tickets->FromSQL(qq{Owner = '$user_id' AND ( Status = 'new' OR Status = 'open')});
 
-    my $now = DateTime->now;
-
     while (my $ticket = $tickets->Next) {
         my $syncitem = $self->_syncable_for_ticket($ticket);
         
@@ -79,6 +77,8 @@ sub _syncable_for_ticket {
     my $self = shift;
     my $ticket = shift;
     
+    my $now = DateTime->now;
+
     my $ic = Data::ICal->new;
     $ic->add_property( version => "1.0" );
     my $todo = Data::ICal::Entry::Todo->new;
