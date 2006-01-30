@@ -85,7 +85,7 @@ sub _syncable_for_ticket {
     $ic->add_entry($todo);
     $todo->add_properties( summary => $ticket->Subject );
     $todo->add_properties( description => 
-        qq{Last thought about at @{[ $now->hms ]} From queue: @{[ $ticket->QueueObj->Name ]}; Status: @{[ $ticket->Status ]}});
+        qq{Nice report: Last thought about at @{[ $now->hms ]} From queue: @{[ $ticket->QueueObj->Name ]}; Status: @{[ $ticket->Status ]}});
 
     my $syncitem = SyncML::SyncableItem->new;
     $syncitem->application_identifier($ticket->Id);
@@ -115,10 +115,6 @@ sub update_item {
     my $ret = SyncML::APIReturn->new;
     $ret->ok(1);
 
-    return $ret unless $status eq 'COMPLETED';
-
-    # They're trying to check off an item; we need to set it to resolved.
-
     my $cu = $self->_get_rt_current_user($username);
 
     my $ticket = RT::Ticket->new($cu);
@@ -128,17 +124,29 @@ sub update_item {
         $self->log->warn("Failed to load ticket '", $syncable_item->application_identifier, "'");
         $ret->ok(0);
         return $ret;
-    } 
-   
-    my ($ok, $msg);
-    if ($just_checking) {
-        $ok = $ticket->CurrentUserHasRight('ModifyTicket');
-    } else {
-        ($ok, $msg) = $ticket->Resolve;
     }
 
-    $ret->ok($ok);
-    $ret->delete_this(1) if $ok;
+    if ($status eq 'COMPLETED') {
+        # They're trying to check off an item; we need to set it to resolved.
+
+        my ($ok, $msg);
+        if ($just_checking) {
+            $ok = $ticket->CurrentUserHasRight('ModifyTicket');
+        } else {
+            ($ok, $msg) = $ticket->Resolve;
+        }
+
+        $ret->ok($ok);
+        $ret->delete_this(1) if $ok;
+    } else {
+        if ($just_checking) {
+            # We need to make sure they get RT's version of the ticket (with the nice report in
+            # the description, etc).  (Only during package 3 ("just checking" phase), because 
+            # that's when we can actually talk back to the client.)
+
+            $ret->replace_with($self->_syncable_for_ticket($ticket));
+        }
+    } 
 
     return $ret;
 } 
