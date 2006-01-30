@@ -83,6 +83,29 @@ See L<SyncML::ContentAsObject> for more information.
 
 __PACKAGE__->mk_object_accessor( content_as_object => qw/content type/ );
 
+=head2 new_from_syncable_item $syncable_item, $client_identifier
+
+(Class method.)  Given a L<SyncML::SyncableItem> and a client identifier (which
+can be undef), returns a new L<SyncDBEntry> with the same type, content, and
+application identifier.
+
+=cut
+
+sub new_from_syncable_item {
+    my $class = shift;
+    my $syncable_item = shift;
+    my $client_identifier = shift;
+
+    my $obj = $class->new;
+    $obj->content($syncable_item->content);
+    $obj->type($syncable_item->type);
+    $obj->application_identifier($syncable_item->application_identifier);
+    
+    $obj->client_identifier($client_identifier);
+
+    return $obj;
+} 
+
 =head1 DIAGNOSTICS
 
 =for author to fill in:

@@ -67,28 +67,35 @@ sub get_application_database {
     my $now = DateTime->now;
 
     while (my $ticket = $tickets->Next) {
-        my $ic = Data::ICal->new;
-        $ic->add_property( version => "1.0" );
-        my $todo = Data::ICal::Entry::Todo->new;
-        $ic->add_entry($todo);
-        $todo->add_properties( summary => $ticket->Subject );
-        $todo->add_properties( description => 
-            qq{Last thought about at @{[ $now->hms ]} From queue: @{[ $ticket->QueueObj->Name ]}; Status: @{[ $ticket->Status ]}});
-
-        $self->log->info("DB contains ticket: ", $ticket->Subject);
-
-        my $syncitem = SyncML::SyncableItem->new;
-        $syncitem->application_identifier($ticket->Id);
-        $syncitem->content( $ic->as_string );
-        $syncitem->type("text/x-vcalendar");
-
-        $syncitem->last_modified_as_seconds( $ticket->LastUpdatedObj->Unix );
-
+        my $syncitem = $self->_syncable_for_ticket($ticket);
+        
         $db->{$ticket->Id} = $syncitem;
     }
 
     return $db;
 }
+
+sub _syncable_for_ticket {
+    my $self = shift;
+    my $ticket = shift;
+    
+    my $ic = Data::ICal->new;
+    $ic->add_property( version => "1.0" );
+    my $todo = Data::ICal::Entry::Todo->new;
+    $ic->add_entry($todo);
+    $todo->add_properties( summary => $ticket->Subject );
+    $todo->add_properties( description => 
+        qq{Last thought about at @{[ $now->hms ]} From queue: @{[ $ticket->QueueObj->Name ]}; Status: @{[ $ticket->Status ]}});
+
+    my $syncitem = SyncML::SyncableItem->new;
+    $syncitem->application_identifier($ticket->Id);
+    $syncitem->content( $ic->as_string );
+    $syncitem->type("text/x-vcalendar");
+
+    $syncitem->last_modified_as_seconds( $ticket->LastUpdatedObj->Unix );
+
+    return $syncitem;
+} 
 
 
 # Note that this also gets called if the application deleted something but the

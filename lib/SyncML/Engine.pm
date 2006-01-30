@@ -535,7 +535,10 @@ sub handle_client_sync {
               # this item?
               if ($ret->delete_this) {
                 $self->push_delete_command($sync_out, $client_id);
-              } else {
+              } elsif ($ret->update_with) {
+                # Did the application want us to replace it with something else?
+                $self->push_replace_command($sync_out, SyncML::SyncDBEntry->new_from_syncable_item($ret->update_with));
+              } else {  
                 # No, it didn't: so save it to the synced state
                 $synced_state->{$client_id} = $client_syncdb_entry;
               } 
@@ -576,12 +579,7 @@ sub handle_client_sync {
        # Whether or not they've deleted it, the server now wins.  In lieu of a
        # real field-by-field merge support, just send out a Replace from us.
 
-        my $replace = SyncML::Message::Command::Replace->new;
-        $self->out_message->stamp_command_id($replace);
-
-        $replace->syncdb_entry($server_syncdb_entry->clone);
-
-        push @{ $sync_out->subcommands }, $replace;
+        $self->push_replace_command($sync_out, $server_syncdb_entry->clone);
 
         $synced_state->{$client_id} = $server_syncdb_entry;
     }
@@ -591,10 +589,7 @@ sub handle_client_sync {
     for my $application_id ( keys %{ $diff->future } ) {
         my $syncable_item = $diff->future->{$application_id};
 
-        my $syncdb_entry = SyncML::SyncDBEntry->new;
-        $syncdb_entry->application_identifier($application_id);
-        $syncdb_entry->content( $syncable_item->content );
-        $syncdb_entry->type( $syncable_item->type );
+        my $syncdb_entry = SyncML::SyncDBEntry->new_from_syncable_item($syncable_item, undef);
 
         my $add = SyncML::Message::Command::Add->new;
         $self->out_message->stamp_command_id($add);
@@ -642,16 +637,16 @@ sub handle_client_sync {
                 $syncable_item->type( $client_syncdb_entry->type );
                 $syncable_item->application_identifier( $client_syncdb_entry->application_identifier );
                 $syncable_item->last_modified_as_seconds( time );
-                my $ok = $self->api->update_item($server_db, $syncable_item, $self->authenticated_user, 1);
+                my $ret = $self->api->update_item($server_db, $syncable_item, $self->authenticated_user, 1);
 
-                if ($ok) {
+                if ($ret->ok) {
                     $self->add_deferred_operation(deferred_update_item =>
                         server_db => $server_db, syncable_item => $syncable_item, 
                         authenticated_user => $self->authenticated_user);
                 } else {
                     # XXX: should translate this into an actual Status failure to
                     # the client.  And not just ignore it.
-                    $self->log->error("XXX: application failed to resurrect an item: $ok");
+                    $self->log->error("XXX: application failed to resurrect an item: ", $ret->ok);
                 }
 
                 $synced_state->{$client_id} = $client_syncdb_entry;
@@ -711,6 +706,25 @@ sub push_delete_command {
     $delete->client_identifier($client_id);
 
     push @{ $sync_out->subcommands }, $delete;
+}
+
+=head2 push_replace_command $sync_command, $syncdb_entry
+
+Given an (outgoing) L<SyncML::Message::Command::Sync> and a SyncDBEntry, adds
+a L<SyncML::Message::Command::Replace> to it for that SyncDBEntry.
+
+=cut
+
+sub push_replace_command {
+    my $self = shift;
+    my $sync_out = shift;
+    my $syncdb_entry = shift;
+
+    my $replace = SyncML::Message::Command::Replace->new;
+    $self->out_message->stamp_command_id($replace);
+    $replace->syncdb_entry($syncdb_entry);
+
+    push @{ $sync_out->subcommands }, $replace;
 }
 
 =head2 deferred_add_item
@@ -965,11 +979,7 @@ sub get_server_differences {
 
                 # Yes, but it's been dirtied.  Get content/type from
                 # SyncableItem instead (ie, from app).
-                my $new_sync_db_entry = SyncML::SyncDBEntry->new;
-                $new_sync_db_entry->content($syncable_item->content);
-                $new_sync_db_entry->type($syncable_item->type);
-                $new_sync_db_entry->application_identifier($syncable_item->application_identifier);
-                $new_sync_db_entry->client_identifier($client_id);
+                my $new_sync_db_entry = SyncML::SyncDBEntry->new_from_syncable_item($syncable_item, $client_id);
 
                 $diff->changed->{$client_id} = $new_sync_db_entry;
             } else {

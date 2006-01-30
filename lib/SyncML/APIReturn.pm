@@ -57,13 +57,23 @@ telling it that the user has completed a task, the application uses this to ask 
 to delete the task from its tasklist, since in the RT integration only open tasks are synchronized.
 (Otherwise the completed task wouldn't disappear from the client until the next synchronization.)
 
-Defaults to false. Valid only in the return from C<update_item>.
+Defaults to false. Valid only in the return from C<update_item>.  Cannot be specified along with
+C<update_with>.
 
+=head2 update_with [$syncable_item]
+
+Gets or sets a syncable item telling the engine that, after taking into account the client's
+request, the current item should be replaced with the given item.  For example, if the application
+wants to keep the body of the item as some sort of calculated report, it should respond to an
+C<update_item> with a return containing an C<update_with> with the new report.
+
+Defaults to undef. Valid only in the return from C<update_item>. Cannot be specified along with
+C<delete_this>.
 
 =cut
 
 __PACKAGE__->mk_accessors(
-    qw/ok delete_this/);
+    qw/ok delete_this update_with/);
 
 =head1 DIAGNOSTICS
 
