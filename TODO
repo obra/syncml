@@ -1,9 +1,5 @@
 SyncML TODO
 
-* Data::ICal
-  * Make it understand the difference between vCal and iCal, esp. as regards QP and line
-    folding
-
 * SyncML / application API
   * Finish transitioning *all* of the methods (not just update_item) to use SyncML::APIReturn
     objects as return values.  (Possibly rewrite all methods to use keyword args too.)
