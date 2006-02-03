@@ -196,18 +196,21 @@ sub delete_item {
 
 sub add_item {
     my $self = shift;
-    my $dbname = shift; # ignored for now
-    my $syncable_item = shift;
-    my $username = shift;
-    my $just_checking = shift;
+    my %args = (
+        server_db => undef, # ignored for now
+        syncable_item => undef,
+        username => undef,
+        just_checking=> 0,
+        @_
+    );
 
-    my $cu = $self->_get_rt_current_user($username);
+    my $cu = $self->_get_rt_current_user($args{username});
     my $q = $self->_get_queue($cu);
 
-    my $ic = $syncable_item->content_as_object;
+    my $ic = $args{syncable_item}->content_as_object;
 
     my ($ok, $application_id);
-    if ($just_checking) {
+    if ($args{just_checking}) {
         $ok = $cu->HasRight(Right => 'CreateTicket', Object => $q) and
               $cu->HasRight(Right => 'OwnTicket',    Object => $q);
     } else {

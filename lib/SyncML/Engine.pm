@@ -680,11 +680,15 @@ sub handle_client_sync {
         $syncable_item->content( $client_syncdb_entry->content );
         $syncable_item->type( $client_syncdb_entry->type );
         $syncable_item->last_modified_as_seconds( time );
-        my($ok, $dummy_application_id) = $self->api->add_item($server_db, $syncable_item, $self->authenticated_user, 1);
+        my($ok, $dummy_application_id) = $self->api->add_item(
+            server_db => $server_db, 
+            syncable_item => $syncable_item, 
+            username => $self->authenticated_user, 
+            just_checking => 1);
 
         if ($ok) {
             $self->add_deferred_operation(deferred_add_item => 
-                server_db => $server_db, syncable_item => $syncable_item, authenticated_user => $self->authenticated_user,
+                server_db => $server_db, syncable_item => $syncable_item, username => $self->authenticated_user,
                 client_identifier => $client_id);
         } else {
             # XXX: should translate this into an actual Status failure to
@@ -748,11 +752,15 @@ sub deferred_add_item {
     my %args = (
         server_db => undef,
         syncable_item => undef,
-        authenticated_user => undef,
+        username => undef,
         client_identifier => undef,
         @_);
 
-    my ($ok, $app_id) = $self->api->add_item($args{server_db}, $args{syncable_item}, $args{authenticated_user});
+    my ($ok, $app_id) = $self->api->add_item(
+        server_db => $args{server_db}, 
+        syncable_item => $args{syncable_item}, 
+        username => $args{username},
+    );
     
     if ($ok) {
         $self->synced_states->{$args{server_db}}{$args{client_identifier}}->application_identifier($app_id);
