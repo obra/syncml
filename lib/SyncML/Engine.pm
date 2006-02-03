@@ -537,7 +537,9 @@ sub handle_client_sync {
                 $self->push_delete_command($sync_out, $client_id);
               } elsif ($ret->replace_with) {
                 # Did the application want us to replace it with something else?
-                $self->push_replace_command($sync_out, SyncML::SyncDBEntry->new_from_syncable_item($ret->replace_with, $client_id));
+                my $new_syncdb_entry = SyncML::SyncDBEntry->new_from_syncable_item($ret->replace_with, $client_id);
+                $self->push_replace_command($sync_out, $new_syncdb_entry);
+                $synced_state->{$client_id} = $new_syncdb_entry;
               } else {  
                 # No, it didn't: so save it to the synced state
                 $synced_state->{$client_id} = $client_syncdb_entry;
