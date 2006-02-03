@@ -3,9 +3,11 @@ SyncML TODO
 * SyncML / application API
   * Finish transitioning *all* of the methods (not just update_item) to use SyncML::APIReturn
     objects as return values.  (Possibly rewrite all methods to use keyword args too.)
+    * Make sure that adding items gets the nice report.
   * Once it's more stable, doc the hell out of that interface.
   * Make sure the RT interface is solid.
   * Bring the YAML API up to date to using the same interface as the RT, so it can be used for testing.
+  * Make the 'nice report' better (with comments, etc).
 
 * Engine
   * Make the engine use something more sane than a yaml file for the "sync DB".
