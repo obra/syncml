@@ -117,25 +117,27 @@ sub _ticket_description {
 # on a deleted item!
 sub update_item {
     my $self = shift;
-    my $dbname = shift; # ignored for now
-    my $syncable_item = shift;
-    my $username = shift;
+    my %args = (
+        server_db => undef, # ignored for now
+        syncable_item => undef,
+        username => undef,
+        just_checking => 0,
+        @_
+    );
 
-    my $just_checking = shift;
-
-    my $ic = $syncable_item->content_as_object;
+    my $ic = $args{syncable_item}->content_as_object;
     my $status = $ic->entries->[0]->property("status")->[0]->decoded_value;
 
     my $ret = SyncML::APIReturn->new;
     $ret->ok(1);
 
-    my $cu = $self->_get_rt_current_user($username);
+    my $cu = $self->_get_rt_current_user($args{username});
 
     my $ticket = RT::Ticket->new($cu);
-    $ticket->Load($syncable_item->application_identifier);
+    $ticket->Load($args{syncable_item}->application_identifier);
 
     unless ($ticket->Id) {
-        $self->log->warn("Failed to load ticket '", $syncable_item->application_identifier, "'");
+        $self->log->warn("Failed to load ticket '", $args{syncable_item}->application_identifier, "'");
         $ret->ok(0);
         return $ret;
     }
@@ -144,7 +146,7 @@ sub update_item {
         # They're trying to check off an item; we need to set it to resolved.
 
         my ($ok, $msg);
-        if ($just_checking) {
+        if ($args{just_checking}) {
             $ok = $ticket->CurrentUserHasRight('ModifyTicket');
         } else {
             ($ok, $msg) = $ticket->Resolve;
@@ -153,7 +155,7 @@ sub update_item {
         $ret->ok($ok);
         $ret->delete_this(1) if $ok;
     } else {
-        if ($just_checking) {
+        if ($args{just_checking}) {
             # We need to make sure they get RT's version of the ticket (with the nice report in
             # the description, etc).  (Only during package 3 ("just checking" phase), because 
             # that's when we can actually talk back to the client.)

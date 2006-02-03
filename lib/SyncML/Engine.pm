@@ -524,12 +524,16 @@ sub handle_client_sync {
           $syncable_item->type( $client_syncdb_entry->type );
           $syncable_item->application_identifier( $client_syncdb_entry->application_identifier );
           $syncable_item->last_modified_as_seconds( time );
-          my $ret = $self->api->update_item($server_db, $syncable_item, $self->authenticated_user, 1);
+          my $ret = $self->api->update_item(
+            server_db => $server_db, 
+            syncable_item => $syncable_item,
+            username => $self->authenticated_user, 
+            just_checking => 1);
 
           if ($ret->ok) {
               $self->add_deferred_operation(deferred_update_item =>
                 server_db => $server_db, syncable_item => $syncable_item, 
-                authenticated_user => $self->authenticated_user);
+                username => $self->authenticated_user);
               
               # Did the application decide that this update actually means that the client should delete
               # this item?
@@ -639,12 +643,16 @@ sub handle_client_sync {
                 $syncable_item->type( $client_syncdb_entry->type );
                 $syncable_item->application_identifier( $client_syncdb_entry->application_identifier );
                 $syncable_item->last_modified_as_seconds( time );
-                my $ret = $self->api->update_item($server_db, $syncable_item, $self->authenticated_user, 1);
+                my $ret = $self->api->update_item(
+                   server_db => $server_db, 
+                   syncable_item => $syncable_item, 
+                   username => $self->authenticated_user, 
+                   just_checking => 1);
 
                 if ($ret->ok) {
                     $self->add_deferred_operation(deferred_update_item =>
                         server_db => $server_db, syncable_item => $syncable_item, 
-                        authenticated_user => $self->authenticated_user);
+                        username => $self->authenticated_user);
                 } else {
                     # XXX: should translate this into an actual Status failure to
                     # the client.  And not just ignore it.
@@ -787,10 +795,10 @@ sub deferred_update_item {
     my %args = (
         server_db => undef,
         syncable_item => undef,
-        authenticated_user => undef,
+        username => undef,
         @_);
 
-    my $ret = $self->api->update_item($args{server_db}, $args{syncable_item}, $args{authenticated_user});
+    my $ret = $self->api->update_item(%args);
     
     unless ($ret->ok) {
         # XXX Not even sure how the spec could expect this to be transmitted to the client.
