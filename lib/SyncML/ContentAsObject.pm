@@ -76,7 +76,8 @@ sub mk_object_accessor {
 
 my %KNOWN_TYPE_CONSTRUCTORS = (
     'text/calendar'    => sub { Data::ICal->new( data => shift ) },
-    'text/x-vcalendar' => sub { Data::ICal->new( data => shift ) },
+    'text/x-vcalendar' => sub { Data::ICal->new( data => shift, 
+                                    vcal10 => 1) },
 );
 
 sub __content_as_object {
