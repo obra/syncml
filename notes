@@ -1,0 +1,35 @@
+<glasser> it would be nice to revive the syncml thing at some point, but it
+          really needs a big tangent into transactionland               [15:01]
+<obra> yes.
+<glasser> (i've been vaguely thinking about a pretty lightweight way of adding
+          distributed transactions as a Jifty::DBI feature)
+<obra> oo
+<glasser> really it's the transaction thing that was holding everything up. if
+          it magically (hint audrey hint hint) appeared, making syncml usable
+          would be much easier
+<obra> a more serious writeup of what you want would be very interesting
+* glasser nods
+<glasser> I mean, the deal is, the access that syncml::server had to the
+          rt/hm/whatever db was just via making random calls on jdbi objects
+                                                                        [15:03]
+<glasser> syncml is a three-phase protocol
+<glasser> if there is a failure in phase three, you need to revert stuff done
+          in phase two
+<glasser> this sucks
+<glasser> normal sql BEGIN TRANSACTION is not going to save you, since these
+          are separate http transactions, maybe even on different machines etc
+                                                                        [15:04]
+<glasser> if jifty->dbi just had a jdbi-level transactionality feature, this
+          would all magically work
+<glasser> i can imagine basically a __transactions table which stores all the
+          changes made in this transaction, and maybe something else which
+          stores stuff read during the transaction                      [15:05]
+<glasser> and when you end the jdbi transaction, it starts a SQL transaction,
+          makes sure that none of the stuff read has changed, commits all the
+          actual changes, and boom, it works
+<glasser> alternatively, we can use db-specific stuff... it looks like mysql
+          actually has some "XA" distributed transaction support, whatever
+          that is                                                       [15:07]
+<obra> will you paste this into a text file and check it in ;)
+<glasser> where?
+<obra> um. syncml/notes or something?
