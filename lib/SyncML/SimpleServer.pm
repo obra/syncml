@@ -74,7 +74,7 @@ sub handle_request {
 
     unless ($engine) {
         $engine = SyncML::Engine->new($self->api);
-        $engine->uri_base( "http://" . hostip . ":8080/" );
+        $engine->uri_base( "http://" . Sys::HostIP->ip . ":8080/" );
     }
 
     my $out_message = $engine->respond_to_message($in_message);
@@ -122,7 +122,7 @@ address (as calculated by L<Sys::HostIP>.
 sub print_banner {
     my $self = shift;
     $self->log->info("You can connect to your server at http://",
-        hostip, ":8080/");
+        Sys::HostIP->ip, ":8080/");
 }
 
 =head2 handler

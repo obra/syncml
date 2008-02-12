@@ -24,7 +24,7 @@ sub start_server : Test( startup => 6 ) {
     isa_ok( $self->{server}, 'Test::HTTP::Server::Simple' );
 
     $self->{URL} = $self->{server}->started_ok;
-    my $ip = hostip;
+    my $ip = Sys::HostIP->ip;
     $self->{URL} =~ s{/localhost\b}{/$ip};
 
 }
